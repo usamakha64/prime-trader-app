@@ -1,1 +1,1 @@
-{"version":"1.0.6","apk_url":"https://github.com/usamakha64/prime-trader-app/releases/download/v1.0.6/PrimeTrader.apk","changelog":"Connection pill ab DISCONNECTED dikhata hai (fake CONNECTED nahi). Balance $0.00 (fake balance nahi)."}
+{"version":"1.0.7","apk_url":"https://github.com/usamakha64/prime-trader-app/releases/download/v1.0.7/PrimeTrader.apk","changelog":"All demo signal/trade generation disabled — signals, trades, strategies, dashboard and P&L charts now start at zero/empty until a real Quotex connection provides live data."}
