@@ -1,5 +1,5 @@
 {
-  "version": "1.1.2",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v1.1.2/PrimeTrader.apk",
-  "changelog": "UI cleanup: fake 'Batch #373 • 64 pairs streaming' text hataya. Strategy list ab single 7-Indicator Strategy dikhati hai."
+  "version": "1.3.0",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v1.3.0/PrimeTrader.apk",
+  "changelog": "Phase 4: Website API + Telegram. Real signals ab website (Supabase) par auto-publish hote hain aur Telegram par bheje jate hain. Signal settle hone par website update + Telegram win/loss. Bot status admin dashboard par sync hota hai."
 }
