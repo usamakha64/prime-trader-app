@@ -1,5 +1,5 @@
 {
-  "version": "1.3.1",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v1.3.1/PrimeTrader.apk",
-  "changelog": "7-indicator signal engine + manual amount input. Real CALL/PUT signals (EMA 9/21/50, RSI 14, ADX 14, ATR 14, Bollinger 20,2) live Quotex stream se, local win/loss settlement ke sath. Signals website + Telegram par auto-publish. Trade AI Bot me manual base amount input."
+  "version": "2.0.0",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.0/PrimeTrader.apk",
+  "changelog": "Phase 5 COMPLETE — Background bot service. Foreground service Quotex connection + 7-indicator signal engine ko background me zinda rakhta hai (persistent notification, Open App / Stop actions). Background signals aur WIN/LOSS results ki Android notifications, app kholne par live sync. SSID expire par alert. Battery optimization exemption prompt."
 }
