@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="gold-dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>Prime Trader — Signals App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ============ HEADER ============ -->
+  <header class="app-header">
+    <div class="header-row">
+      <div class="brand">
+        <div class="brand-mark"><img src="logo.webp" alt="Prime Trader" style="width:100%;height:100%;object-fit:cover;border-radius:12px"></div>
+        <div>
+          <div class="brand-name">Prime <span class="accent">Trader</span></div>
+          <div class="brand-sub">Signals App</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="stop-btn" id="stopBtn"><span class="pulse-ring"></span>🛑 STOP</button>
+        <button class="icon-btn" id="themeToggle" title="Day / Night">🌙</button>
+      </div>
+    </div>
+    <div class="header-row" style="margin-top:.55rem">
+      <span class="conn-pill" id="connPill"><span class="dot"></span>CONNECTED</span>
+      <button class="acct-chip" id="acctChip">📊 DEMO ▾</button>
+    </div>
+  </header>
+
+  <!-- ============ PAGE: HOME ============ -->
+  <main class="page active" id="page-home">
+    <div class="brand-hero">
+      <div class="brand-hero-title">PRIME TRADER</div>
+      <div class="brand-hero-tag">Premium Signals</div>
+      <div class="brand-hero-rule"></div>
+    </div>
+    <div class="stopped-banner" id="stoppedBanner">
+      <div class="sb-title">🛑 TRADING STOPPED</div>
+      <div class="small text-muted">Emergency stop is active. Press RESUME in the header to continue.</div>
+    </div>
+
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-sub">Live performance overview — updated in real time.</p>
+
+    <!-- Hisab Kitab -->
+    <div class="stat-grid">
+      <div class="stat-card gold reveal shine">
+        <div class="stat-ico">🎯</div>
+        <div class="stat-num" id="stWinRate">0%</div>
+        <span class="stat-label">Win Rate</span>
+      </div>
+      <div class="stat-card green reveal">
+        <div class="stat-ico">✅</div>
+        <div class="stat-num" id="stWins">0</div>
+        <span class="stat-label">Wins</span>
+      </div>
+      <div class="stat-card red reveal">
+        <div class="stat-ico">❌</div>
+        <div class="stat-num" id="stLosses">0</div>
+        <span class="stat-label">Losses</span>
+      </div>
+      <div class="stat-card reveal">
+        <div class="stat-ico">📊</div>
+        <div class="stat-num" id="stTotal">0</div>
+        <span class="stat-label">Total Trades</span>
+      </div>
+      <div class="stat-card stat-wide green reveal">
+        <div>
+          <div class="stat-ico" style="margin-bottom:.2rem">💰</div>
+          <span class="stat-label">Today's P&amp;L</span>
+        </div>
+        <div class="stat-num" id="stPnl">+$0</div>
+      </div>
+    </div>
+
+    <!-- Balance row -->
+    <div class="card shine reveal">
+      <div class="row-between">
+        <div>
+          <div class="tiny text-muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:700">Account Balance</div>
+          <div style="font-size:1.5rem;font-weight:800;margin-top:.15rem" id="stBalance">$0.00</div>
+        </div>
+        <div class="progress-ring" id="wrRing">
+          <svg width="74" height="74" viewBox="0 0 74 74">
+            <circle cx="37" cy="37" r="30" fill="none" stroke="var(--card-border)" stroke-width="7"/>
+            <circle id="wrArc" cx="37" cy="37" r="30" fill="none" stroke="var(--accent)" stroke-width="7"
+              stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="60"/>
+          </svg>
+          <div class="pct" id="wrPct">0%</div>
+        </div>
+      </div>
+      <div class="row-between mt1">
+        <span class="pill pill-gold">⚡ Bot Running</span>
+        <span class="small text-muted" id="batchLabel">Batch #373 • 64 pairs streaming</span>
+      </div>
+    </div>
+
+    <!-- Strategy record (home) -->
+    <div class="card reveal">
+      <div class="card-title"><span class="t-ico">🧠</span> Strategy Record</div>
+      <div id="homeStrategies"></div>
+      <button class="btn btn-ghost btn-sm btn-block mt1" data-nav="stats">View Full Performance →</button>
+    </div>
+
+    <!-- Live signals feed -->
+    <div class="row-between mb1">
+      <h2 class="page-title" style="font-size:1.1rem;margin:0">🔴 Live Signals</h2>
+      <span class="pill pill-green"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block"></span> Streaming</span>
+    </div>
+    <div id="liveFeed"></div>
+  </main>
+
+  <!-- ============ PAGE: SIGNALS ============ -->
+  <main class="page" id="page-signals">
+    <h1 class="page-title">Signals</h1>
+    <p class="page-sub">Regular and future signals — generated by the bot engine.</p>
+    <div class="segmented" id="sigTabs">
+      <button class="active" data-sigtab="regular">📡 Regular Signals</button>
+      <button data-sigtab="future">🔮 Future Signals</button>
+    </div>
+    <div id="sigRegular"></div>
+    <div id="sigFuture" style="display:none"></div>
+  </main>
+
+  <!-- ============ PAGE: HISTORY ============ -->
+  <main class="page" id="page-history">
+    <h1 class="page-title">Trades</h1>
+    <p class="page-sub">Open trades appear here instantly. History is grouped by batch.</p>
+    <div class="segmented" id="histTabs">
+      <button class="active" data-histtab="live">⚡ Live Trades <span id="liveCount" class="pill pill-gold" style="margin-left:.3rem">2</span></button>
+      <button data-histtab="history">📜 History</button>
+      <button data-histtab="signals">📡 Signals</button>
+    </div>
+
+    <!-- LIVE TRADES -->
+    <div id="histLive"></div>
+
+    <!-- BATCH HISTORY -->
+    <div id="histBatches" style="display:none">
+      <div class="row-between mb1">
+        <span class="small text-muted" id="histSummary"></span>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" id="exportCsv">⬇ CSV</button>
+          <button class="btn btn-ghost btn-sm" id="exportXls">⬇ Excel</button>
+        </div>
+      </div>
+      <div id="batchList"></div>
+    </div>
+
+    <!-- SIGNAL HISTORY -->
+    <div id="histSignals" style="display:none"></div>
+  </main>
+
+  <!-- ============ PAGE: STATS ============ -->
+  <main class="page" id="page-stats">
+    <h1 class="page-title">Performance</h1>
+    <p class="page-sub">Strategy-wise accuracy — compare and pick your best edge.</p>
+
+    <div class="chart-card shine reveal">
+      <div class="card-title"><span class="t-ico">📈</span> P&amp;L — Last 14 Days</div>
+      <canvas id="pnlChart"></canvas>
+      <div class="chart-legend">
+        <span><span class="sw" style="background:var(--green)"></span>Profit</span>
+        <span><span class="sw" style="background:var(--red)"></span>Loss</span>
+      </div>
+    </div>
+
+    <div class="chart-card reveal">
+      <div class="card-title"><span class="t-ico">🌊</span> Equity Curve</div>
+      <canvas id="eqChart"></canvas>
+      <div class="chart-legend">
+        <span><span class="sw" style="background:var(--accent)"></span>Balance</span>
+      </div>
+    </div>
+
+    <h2 class="page-title" style="font-size:1.1rem">🧠 Strategy Accuracy</h2>
+    <p class="page-sub">Ranked by win rate. Switch strategies in Settings to test.</p>
+    <div id="stratList"></div>
+  </main>
+
+  <!-- ============ PAGE: SETTINGS ============ -->
+  <main class="page" id="page-settings">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Everything is customizable. Changes save automatically.</p>
+
+    <!-- ACCOUNT -->
+    <div class="set-section">
+      <div class="set-section-title">👤 Account</div>
+      <div class="set-row" id="rowAccount">
+        <div><div class="set-label">Account Type</div><div class="set-desc">Demo / Real / Tournament — switching asks for confirmation</div></div>
+        <span class="set-val" id="setAcctVal">DEMO ▸</span>
+      </div>
+      <div class="set-row" id="rowTournament" style="display:none">
+        <div style="flex:1">
+          <div class="set-label">Tournament ID</div>
+          <div class="field" style="margin:.5rem 0 0"><input type="text" id="inTournId" placeholder="Enter tournament ID"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SSID -->
+    <div class="set-section">
+      <div class="set-section-title">🔑 Quotex SSID</div>
+      <div class="card" style="margin-bottom:0">
+        <div class="row-between mb1">
+          <span class="pill pill-green" id="ssidStatus">● Valid</span>
+          <span class="tiny text-muted" id="ssidAge">Updated 2h ago</span>
+        </div>
+        <div class="field">
+          <label>Session ID</label>
+          <div class="pwd-wrap">
+            <input type="password" id="inSsid" placeholder="Paste new SSID here">
+            <button type="button" class="pwd-toggle" id="btnSsidToggle" aria-label="Show SSID">👁️</button>
+          </div>
+          <div class="hint">Save connects to Quotex. Expiry sends an in-app notification.</div>
+        </div>
+        <button class="btn btn-gold btn-block" id="btnSaveSsid">💾 Save &amp; Connect</button>
+        <button class="btn btn-ghost btn-sm btn-block mt1" id="btnDisconnectSsid" style="display:none">🔌 Disconnect</button>
+      </div>
+    </div>
+
+    <!-- SIGNALS -->
+    <div class="set-section">
+      <div class="set-section-title">📡 Regular Signals</div>
+      <div class="set-row"><div><div class="set-label">Min Confidence</div><div class="set-desc">Signals below this are ignored</div></div><span class="set-val" id="vMinConf">75%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMinConf" min="50" max="95" value="75"></div>
+      <div class="set-row"><div><div class="set-label">Strong Signal</div><div class="set-desc">Batched as strong signals</div></div><span class="set-val" id="vStrongConf">85%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inStrongConf" min="60" max="98" value="85"></div>
+      <div class="set-row"><div><div class="set-label">Compounding Confidence</div><div class="set-desc">Only signals at/above this compound</div></div><span class="set-val" id="vCompConf">95%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inCompConf" min="80" max="99" value="95"></div>
+      <div class="set-row"><div><div class="set-label">Min Payout %</div><div class="set-desc">Only pairs with payout at/above this — lower payout pairs are dropped</div></div><span class="set-val" id="vMinPayout">75%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMinPayout" min="50" max="95" value="75"></div>
+      <div class="set-row"><div><div class="set-label">Signals per Period</div><div class="set-desc">How many signals in each period</div></div><span class="set-val" id="vSigCount">15 / 30 min</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none">
+        <div class="chip-wrap" id="sigCountChips" style="padding:.25rem 0"></div>
+        <div class="chip-wrap" id="sigPeriodChips" style="padding:.25rem 0"></div>
+      </div>
+      <div class="set-row"><div><div class="set-label">Signal Gap</div><div class="set-desc">Minimum gap between two signals</div></div><span class="set-val" id="vSigGap">120s</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="sigGapChips" style="padding:.25rem 0"></div></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Expiry</div><div class="set-desc">Regular signals trade duration</div></div><span class="set-val" id="vExpiry">1 min</span></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><div class="chip-wrap" id="expiryChips" style="padding:.25rem 0">
+        <button class="chip" data-expiry="60">1 min</button>
+        <button class="chip" data-expiry="120">2 min</button>
+        <button class="chip" data-expiry="300">5 min</button>
+      </div></div>
+    </div>
+
+    <!-- FUTURE SIGNALS -->
+    <div class="set-section">
+      <div class="set-section-title">🔮 Future Signals</div>
+      <div class="set-row"><div><div class="set-label">Timeframes</div><div class="set-desc">Candle timeframes to analyze (multi-select)</div></div><span class="set-val" id="vFutureTf">5m</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="futureTfChips" style="padding:.25rem 0">
+        <button class="chip" data-tf="5">5 min</button>
+        <button class="chip" data-tf="15">15 min</button>
+        <button class="chip" data-tf="30">30 min</button>
+      </div></div>
+      <div class="set-row"><div><div class="set-label">Min Confidence</div><div class="set-desc">Future signals below this are ignored</div></div><span class="set-val" id="vFutureMinConf">75%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inFutureMinConf" min="50" max="95" value="75"></div>
+      <div class="set-row"><div><div class="set-label">Min Payout %</div><div class="set-desc">Future-signal analysis only on pairs at/above this payout</div></div><span class="set-val" id="vFuturePayout">85%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inFuturePayout" min="50" max="95" value="85"></div>
+      <div class="set-row"><div><div class="set-label">Lookback Period</div><div class="set-desc">Analyze trades from this far back</div></div><span class="set-val" id="vFutureLookback">1 hour</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="futureLookbackChips" style="padding:.25rem 0">
+        <button class="chip" data-lb="1">1 hour</button>
+        <button class="chip" data-lb="2">2 hours</button>
+        <button class="chip" data-lb="4">4 hours</button>
+      </div></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Signals per Batch</div><div class="set-desc">How many future signals to send at once</div></div><span class="set-val" id="vFutureBatchSize">20</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="futureBatchSizeChips" style="padding:.25rem 0">
+        <button class="chip" data-bs="15">15</button>
+        <button class="chip" data-bs="20">20</button>
+        <button class="chip" data-bs="25">25</button>
+        <button class="chip" data-bs="30">30</button>
+      </div></div>
+      <div class="set-row"><div><div class="set-label">Signals per Period</div><div class="set-desc">How many future signals in each period</div></div><span class="set-val" id="vFutureSigCount">20 / 30 min</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none">
+        <div class="chip-wrap" id="futureSigCountChips" style="padding:.25rem 0"></div>
+        <div class="chip-wrap" id="futureSigPeriodChips" style="padding:.25rem 0"></div>
+      </div>
+      <div class="set-row"><div><div class="set-label">Signal Gap</div><div class="set-desc">Minimum gap between two future signals</div></div><span class="set-val" id="vFutureSigGap">120s</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="futureSigGapChips" style="padding:.25rem 0"></div></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Expiry</div><div class="set-desc">Future signals trade duration</div></div><span class="set-val" id="vFutureExpiry">1 min</span></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><div class="chip-wrap" id="futureExpiryChips" style="padding:.25rem 0"></div></div>
+    </div>
+
+    <!-- TRADING -->
+    <div class="set-section">
+      <div class="set-section-title">💹 Trade AI Bot</div>
+      <div class="set-row"><div class="set-label">Auto Trade</div><label class="toggle"><input type="checkbox" id="tAutoTrade" checked><span class="track"></span></label></div>
+      <div class="set-row"><div><div class="set-label">Base Amount</div><div class="set-desc">USD per trade</div></div><span class="set-val" id="vAmount">$10</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAmount" min="1" max="3000" value="10"></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Auto-Trade Confidence</div><div class="set-desc">Bot only auto-trades signals at/above this — lower ones show as signals only, no trade</div></div><span class="set-val" id="vAutoTradeConf">85%</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAutoTradeConf" min="50" max="95" value="85"></div>
+      <div class="set-row"><div><div class="set-label">MTG Multiplier</div><div class="set-desc">Stake multiplier after a loss</div></div><span class="set-val" id="vMtgMult">2.0×</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMtgMult" min="1" max="5" step="0.1" value="2"></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Max MTG Steps</div><div class="set-desc">Stop after N martingale steps</div></div><span class="set-val" id="vMtgSteps">3</span></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><input type="range" id="inMtgSteps" min="1" max="5" value="3"></div>
+    </div>
+
+    <!-- COMPOUNDING -->
+    <div class="set-section">
+      <div class="set-section-title">💎 Compounding</div>
+      <div class="set-row"><div><div class="set-label">Compounding Trades</div><div class="set-desc">Win amount + profit rolls into next trade</div></div><label class="toggle"><input type="checkbox" id="tCompounding"><span class="track"></span></label></div>
+      <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Compounding Cap</div><div class="set-desc">Max stake = base × cap</div></div><span class="set-val" id="vCompCap">×5</span></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><input type="range" id="inCompCap" min="2" max="10" value="5"></div>
+    </div>
+
+    <!-- RISK -->
+    <div class="set-section">
+      <div class="set-section-title">🛡️ Risk Management</div>
+      <div class="set-row"><div><div class="set-label">Daily Loss Limit</div><div class="set-desc">Auto-stop when daily loss hits this</div></div><span class="set-val" id="vLossLimit">$100</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inLossLimit" min="10" max="1000" step="10" value="100"></div>
+      <div class="set-row"><div><div class="set-label">Daily Profit Target</div><div class="set-desc">Auto-stop when target is reached</div></div><span class="set-val" id="vProfitTarget">$200</span></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inProfitTarget" min="20" max="2000" step="20" value="200"></div>
+      <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Auto-Stop Enabled</div><div class="set-desc">Enforce limits automatically</div></div><label class="toggle"><input type="checkbox" id="tAutoStop" checked><span class="track"></span></label></div>
+    </div>
+
+    <!-- TRADING HOURS -->
+    <div class="set-section">
+      <div class="set-section-title">⏰ Trading Hours</div>
+      <div class="set-row"><div class="set-label">Start Time</div><input type="time" id="inStartTime" value="09:00" style="background:var(--input-bg);border:1px solid var(--card-border);color:var(--text);border-radius:10px;padding:.5rem;font-family:inherit"></div>
+      <div class="set-row"><div class="set-label">End Time</div><input type="time" id="inEndTime" value="23:00" style="background:var(--input-bg);border:1px solid var(--card-border);color:var(--text);border-radius:10px;padding:.5rem;font-family:inherit"></div>
+      <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Pause on News</div><div class="set-desc">Auto-pause around high-impact news</div></div><label class="toggle"><input type="checkbox" id="tNewsPause" checked><span class="track"></span></label></div>
+    </div>
+
+    <!-- ASSETS -->
+    <div class="set-section">
+      <div class="set-section-title">💱 Assets <span class="tiny text-muted" id="assetCount"></span></div>
+      <div class="card"><div class="chip-wrap" id="assetChips"></div></div>
+    </div>
+
+    <!-- TELEGRAM -->
+    <div class="set-section">
+      <div class="set-section-title">✈️ Telegram</div>
+      <div class="card">
+        <div class="field"><label>Bot Token</label><input type="password" id="inTgToken" placeholder="123456:ABC-DEF..."></div>
+        <div class="field"><label>Chat / Channel ID</label><input type="text" id="inTgChat" placeholder="ID"></div>
+        <div class="set-row" style="border-radius:14px"><div class="set-label">Signal Alerts</div><label class="toggle"><input type="checkbox" id="tTgSignals" checked><span class="track"></span></label></div>
+      </div>
+    </div>
+
+    <!-- THEME -->
+    <div class="set-section">
+      <div class="set-section-title">🎨 Theme</div>
+      <div class="theme-grid" id="themeGrid">
+        <div class="theme-opt selected" data-theme-opt="gold-dark"><div class="theme-preview tp-gold-dark"></div><div class="theme-name">Gold Dark</div></div>
+        <div class="theme-opt" data-theme-opt="gold-light"><div class="theme-preview tp-gold-light"></div><div class="theme-name">Gold Light</div></div>
+        <div class="theme-opt" data-theme-opt="midnight"><div class="theme-preview tp-midnight"></div><div class="theme-name">Midnight Blue</div></div>
+      </div>
+    </div>
+
+    <!-- APP LOCK -->
+    <div class="set-section">
+      <div class="set-section-title">🔐 App Lock</div>
+      <div class="set-row"><div><div class="set-label">PIN Lock</div><div class="set-desc">Require PIN on app open</div></div><label class="toggle"><input type="checkbox" id="tPinLock"><span class="track"></span></label></div>
+      <div class="set-row" id="rowSetPin" style="display:none"><div style="flex:1"><div class="set-label">Set PIN</div><div class="field" style="margin:.5rem 0 0"><input type="password" id="inPin" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"></div></div></div>
+      <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Fingerprint Unlock</div><div class="set-desc">Use biometrics when available</div></div><label class="toggle"><input type="checkbox" id="tFingerprint"><span class="track"></span></label></div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="set-section">
+      <div class="set-section-title">🔔 Notifications</div>
+      <div class="set-row"><div class="set-label">Push — Signals</div><label class="toggle"><input type="checkbox" id="tPushSignals" checked><span class="track"></span></label></div>
+      <div class="set-row"><div class="set-label">Push — Trade Results</div><label class="toggle"><input type="checkbox" id="tPushResults" checked><span class="track"></span></label></div>
+      <div class="set-row" style="border-radius:0 0 14px 14px"><div class="set-label">Push — SSID Expiry</div><label class="toggle"><input type="checkbox" id="tPushSsid" checked><span class="track"></span></label></div>
+    </div>
+
+    <!-- UPDATES -->
+    <div class="set-section">
+      <div class="set-section-title">⬆️ Updates</div>
+      <div class="card">
+        <div class="row-between mb1">
+          <div><div class="set-label">App Version</div><div class="ver-badge" id="appVer">v1.0.1 • GitHub: prime-trader-app</div></div>
+        </div>
+        <button class="btn btn-gold btn-block" id="btnCheckUpdate">🔍 Check for Updates</button>
+        <div id="updateResult" class="mt1" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- TUTORIAL -->
+    <div class="set-section">
+      <div class="set-section-title">🎓 Help</div>
+      <div class="set-row" id="rowTutorial" style="border-radius:14px"><div class="set-label">Replay Tutorial</div><span class="set-val">▸</span></div>
+    </div>
+    <div style="height:1rem"></div>
+  </main>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" data-nav="home"><span class="nav-ico">🏠</span>Home</button>
+    <button class="nav-tab" data-nav="signals"><span class="nav-ico">📡</span>Signals</button>
+    <button class="nav-tab" data-nav="history"><span class="nav-ico">📜</span>Trades</button>
+    <button class="nav-tab" data-nav="stats"><span class="nav-ico">📊</span>Stats</button>
+    <button class="nav-tab" data-nav="settings"><span class="nav-ico">⚙️</span>Settings</button>
+  </nav>
+</div><!-- /app-shell -->
+
+<!-- ============ MODALS ============ -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalBox">
+    <div class="modal-grab"></div>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- ============ LOCK SCREEN ============ -->
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-logo"><img src="logo.webp" alt="Prime Trader" style="width:100%;height:100%;object-fit:cover;border-radius:16px"></div>
+  <div class="lock-title">Welcome back</div>
+  <div class="lock-sub">Enter your PIN to unlock Prime Trader</div>
+  <div class="pin-dots" id="pinDots"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
+  <div class="pin-pad" id="pinPad">
+    <button class="pin-key">1</button><button class="pin-key">2</button><button class="pin-key">3</button>
+    <button class="pin-key">4</button><button class="pin-key">5</button><button class="pin-key">6</button>
+    <button class="pin-key">7</button><button class="pin-key">8</button><button class="pin-key">9</button>
+    <button class="pin-key fn" id="pinClear">⌫</button><button class="pin-key">0</button><button class="pin-key fn" id="pinOk">✓</button>
+  </div>
+  <button class="fp-btn" id="fpBtn" title="Fingerprint">👆</button>
+</div>
+
+<!-- ============ ONBOARDING ============ -->
+<div class="onboard" id="onboard">
+  <button class="ob-skip" id="obSkip">Skip →</button>
+  <div class="ob-slides" id="obSlides">
+    <div class="ob-slide"><div class="ob-ico">📡</div><h2>Smart Signals</h2><p>AI-powered CALL / PUT signals with confidence scoring across 64+ Quotex pairs.</p></div>
+    <div class="ob-slide"><div class="ob-ico">💎</div><h2>Compounding Mode</h2><p>95%+ confidence signals auto-compound your wins for exponential growth.</p></div>
+    <div class="ob-slide"><div class="ob-ico">🛡️</div><h2>Risk Control</h2><p>Daily loss limits, profit targets and one-tap emergency stop keep you safe.</p></div>
+    <div class="ob-slide"><div class="ob-ico">📊</div><h2>Track Everything</h2><p>Batch-wise trade history, strategy accuracy and live P&amp;L charts.</p></div>
+  </div>
+  <div class="ob-dots" id="obDots"><div class="ob-dot active"></div><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+  <div class="ob-foot">
+    <button class="btn btn-ghost" id="obBack" style="display:none">← Back</button>
+    <button class="btn btn-gold" id="obNext">Next →</button>
+  </div>
+</div>
+
+<!-- ============ TOASTS ============ -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

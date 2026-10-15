@@ -1,0 +1,17 @@
+{
+  "name": "prime-trader-app",
+  "version": "1.0.0",
+  "description": "Premium trading signals app UI for the **Prime Trader** brand. Matches the [prime-trader-website](https://prime-trader.vercel.app) gold/dark professional theme.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  }
+}
