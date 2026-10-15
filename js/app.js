@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '1.0.9';
+const APP_VERSION = '1.1.2';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -162,9 +162,7 @@ const sigHistory = [];
 
 /* Strategies */
 const strategies = [
-  { name: 'EMA Trend + 5m Confirm', trades: 0, wins: 0, desc: 'Default strategy • live' },
-  { name: 'RSI Reversal', trades: 0, wins: 0, desc: 'Mean reversion on extremes' },
-  { name: 'Bollinger Breakout', trades: 0, wins: 0, desc: 'Volatility expansion' },
+  { name: '7-Indicator Strategy', trades: 0, wins: 0, desc: 'EMA 9/21/50 • RSI 14 • ADX 14 • ATR 14 • BB 20,2' },
 ];
 strategies.forEach(s => { s.acc = s.trades ? Math.round(s.wins / s.trades * 100) : 0; });
 strategies.sort((a, b) => b.acc - a.acc);
@@ -629,6 +627,7 @@ function renderSsid() {
   else { st.className = 'pill pill-red'; st.textContent = '● Not set'; }
   $('ssidAge').textContent = S.ssidSavedAt ? ('Saved ' + S.ssidSavedAt) : '';
   $('btnDisconnectSsid').style.display = has ? '' : 'none';
+  $('btnCopySsid').style.display = has ? '' : 'none';
   // mask indicator: show placeholder when an SSID is stored
   if (has && !$('inSsid').value) $('inSsid').placeholder = '•••••••• SSID saved — paste new to replace';
   else if (!has) $('inSsid').placeholder = 'Paste new SSID here';
@@ -672,6 +671,24 @@ $('btnDisconnectSsid').addEventListener('click', () => {
   S = store.set({ ssid: '' , ssidSavedAt: '' });
   renderSsid();
   toast('🔌 <b>Disconnected.</b> SSID removed.', 'red');
+});
+// Copy SSID
+$('btnCopySsid').addEventListener('click', () => {
+  if (S.ssid) {
+    navigator.clipboard.writeText(S.ssid).then(() => {
+      toast('📋 <b>SSID copied!</b>', 'green');
+    }).catch(() => {
+      toast('❌ Copy failed', 'red');
+    });
+  }
+});
+// Copy SSID console command
+$('btnCopySsidCmd').addEventListener('click', () => {
+  navigator.clipboard.writeText('copy(window.settings.token)').then(() => {
+    toast('📋 <b>Command copied!</b> Chrome console me paste karo.', 'green');
+  }).catch(() => {
+    toast('❌ Copy failed', 'red');
+  });
 });
 // SSID expiry hook (wired to native QuotexWsClient onAuthFailed)
 function onSsidExpired() {
@@ -718,6 +735,7 @@ window.onQxInstruments = function (jsonStr) {
     const arr = JSON.parse(jsonStr);
     S = store.set({ qxInstruments: arr });
     toast('📊 <b>' + arr.length + ' pairs</b> loaded from Quotex', 'green');
+    renderAssetChips();
   } catch (e) {}
 };
 // Called by native for every real price tick: onPriceTick(asset, timestampMs, price)
@@ -816,9 +834,25 @@ function initSettings() {
   renderFutureExpiryChips();
 }
 function renderAssetChips() {
-  $('assetChips').innerHTML = ALL_ASSETS.map(a => `
-    <button class="chip ${S.assets.includes(a) ? 'on' : ''}" data-asset="${a}">${assetName(a)}</button>`).join('');
-  $('assetCount').textContent = `(${S.assets.length} selected)`;
+  // Use real Quotex instruments with payouts if available, else fallback to hardcoded
+  const instruments = S.qxInstruments && S.qxInstruments.length > 0 ? S.qxInstruments : null;
+  let chipsHtml = '';
+  if (instruments) {
+    // Real pairs from Quotex with payout %
+    chipsHtml = instruments.map(inst => {
+      const name = inst.name || inst.asset || inst.symbol;
+      const payout = inst.payout || inst.profit || 0;
+      const selected = S.assets.includes(name);
+      return `<button class="chip ${selected ? 'on' : ''}" data-asset="${name}">${assetName(name)} <span class="payout">${payout}%</span></button>`;
+    }).join('');
+    $('assetCount').textContent = `(${instruments.length} live from Quotex)`;
+  } else {
+    // Fallback to hardcoded list
+    chipsHtml = ALL_ASSETS.map(a => `
+      <button class="chip ${S.assets.includes(a) ? 'on' : ''}" data-asset="${a}">${assetName(a)}</button>`).join('');
+    $('assetCount').textContent = `(${S.assets.length} selected)`;
+  }
+  $('assetChips').innerHTML = chipsHtml;
   $$('#assetChips .chip').forEach(c => c.addEventListener('click', () => {
     const a = c.dataset.asset;
     let arr = S.assets.slice();

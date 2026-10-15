@@ -97,7 +97,7 @@
       </div>
       <div class="row-between mt1">
         <span class="pill pill-gold">⚡ Bot Running</span>
-        <span class="small text-muted" id="batchLabel">Batch #373 • 64 pairs streaming</span>
+        <span class="small text-muted" id="batchLabel">Connect to Quotex for live data</span>
       </div>
     </div>
 
@@ -219,8 +219,13 @@
             <button type="button" class="pwd-toggle" id="btnSsidToggle" aria-label="Show SSID">👁️</button>
           </div>
           <div class="hint">Save connects to Quotex. Expiry sends an in-app notification.</div>
+          <div class="hint" style="margin-top:.5rem">💡 <b>SSID kaise lein:</b> Laptop Chrome me Quotex kholo → F12 → Console → paste karo:<br>
+            <code id="ssidCmd" style="user-select:all">copy(window.settings.token)</code>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnCopySsidCmd" style="margin-top:.25rem">📋 Copy Command</button>
+          </div>
         </div>
         <button class="btn btn-gold btn-block" id="btnSaveSsid">💾 Save &amp; Connect</button>
+        <button class="btn btn-ghost btn-sm btn-block mt1" id="btnCopySsid" style="display:none">📋 Copy SSID</button>
         <button class="btn btn-ghost btn-sm btn-block mt1" id="btnDisconnectSsid" style="display:none">🔌 Disconnect</button>
       </div>
     </div>
