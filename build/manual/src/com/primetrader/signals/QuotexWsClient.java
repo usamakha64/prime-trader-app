@@ -434,13 +434,17 @@ public class QuotexWsClient {
         final String host = connectedHost;
         final String token = ssid;
         if (host.isEmpty() || token.isEmpty()) return;
+        // v2.0.30: include full web cookies (WebView login) as first try — pyquotex-style
+        final String wc = webCookies;
         Thread t = new Thread(() -> {
             // v2.0.7: try several auth styles; log each result to diagnostics
-            String[][] tries = {
-                {"session=" + token, null},
-                {token, null},
-                {null, "Bearer " + token},
-            };
+            java.util.List<String[]> tries = new java.util.ArrayList<>();
+            if (wc != null && !wc.isEmpty()) {
+                tries.add(new String[]{wc, null}); // full browser cookies FIRST
+            }
+            tries.add(new String[]{"session=" + token, null});
+            tries.add(new String[]{token, null});
+            tries.add(new String[]{null, "Bearer " + token});
             StringBuilder log = new StringBuilder();
             for (String[] tr : tries) {
                 java.net.HttpURLConnection c = null;
@@ -776,15 +780,16 @@ public class QuotexWsClient {
     private void storeInstruments(JSONArray list) {
         try {
             // v2.0.10: MERGE into payoutMap instead of overwriting (prevents 92->24 drop)
+            // v2.0.30: accept instruments even without payout (default 0) — don't skip
             synchronized (payoutMap) {
                 for (int i = 0; i < list.length(); i++) {
                     try {
                         JSONObject o = list.optJSONObject(i);
                         if (o == null) continue;
                         String sym = o.optString("asset", o.optString("symbol", o.optString("name", "")));
-                        int payout = o.optInt("payout", o.optInt("profit", -1));
-                        if (!sym.isEmpty() && payout >= 0) {
-                            payoutMap.put(sym, payout);
+                        int payout = o.optInt("payout", o.optInt("profit", o.optInt("payout_percent", 0)));
+                        if (!sym.isEmpty()) {
+                            payoutMap.put(sym, Math.max(0, payout));
                         }
                     } catch (Exception ignored) {}
                 }

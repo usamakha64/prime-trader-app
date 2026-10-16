@@ -39,6 +39,9 @@ public class BotEngine {
     private volatile String mSsid = "";
     private volatile boolean mConnecting = false;
     private volatile String mLastHost = "";
+    // v2.0.30: auto-reconnect state
+    private volatile boolean mManualDisconnect = false;
+    private volatile int mReconnectAttempts = 0;
     private static final String PREFS_PAIRS = "quotex_pairs";
     private static final String KEY_PAIRS = "pairs_json";
     private volatile Context mAppCtx = null;
@@ -47,6 +50,8 @@ public class BotEngine {
     private final QuotexWsClient.Listener mFanout = new QuotexWsClient.Listener() {
         @Override public void onConnected(String host) {
             mLastHost = host == null ? "" : host;
+            // v2.0.30: connection restored — reset reconnect backoff
+            mReconnectAttempts = 0;
             for (QuotexWsClient.Listener l : mListeners) {
                 try { l.onConnected(host); } catch (Exception ignored) {}
             }
@@ -60,6 +65,8 @@ public class BotEngine {
             for (QuotexWsClient.Listener l : mListeners) {
                 try { l.onDisconnected(reason); } catch (Exception ignored) {}
             }
+            // v2.0.30: auto-reconnect with exponential backoff (unless user manually disconnected)
+            scheduleReconnect();
         }
         @Override public void onBalance(double demo, double live, String cur) {
             for (QuotexWsClient.Listener l : mListeners) {
@@ -109,6 +116,9 @@ public class BotEngine {
         if (s.isEmpty() && ctx != null) s = getSavedSsid(ctx);
         if (s.isEmpty()) return;
         final String target = s;
+        // v2.0.30: user-initiated connect — clear manual-disconnect flag, reset backoff
+        mManualDisconnect = false;
+        mReconnectAttempts = 0;
         if (ctx != null) mAppCtx = ctx.getApplicationContext();
         synchronized (mLock) {
             if (mClient != null && mClient.isAuthenticated() && target.equals(mSsid)) {
@@ -162,6 +172,9 @@ public class BotEngine {
 
     /** Tear the socket down (async). */
     public void disconnect() {
+        // v2.0.30: mark manual disconnect so auto-reconnect doesn't fire
+        mManualDisconnect = true;
+        mReconnectAttempts = 0;
         new Thread(new Runnable() {
             @Override public void run() {
                 synchronized (mLock) {
@@ -172,6 +185,35 @@ public class BotEngine {
                 }
             }
         }, "botengine-disconnect").start();
+    }
+
+    /** v2.0.30: auto-reconnect with exponential backoff after unexpected disconnect. */
+    private void scheduleReconnect() {
+        if (mManualDisconnect) return; // user chose to disconnect
+        final int attempt;
+        synchronized (mLock) {
+            mReconnectAttempts++;
+            attempt = mReconnectAttempts;
+        }
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        final long delayMs = Math.min(5000L * (1L << Math.min(attempt - 1, 3)), 60000L);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try { Thread.sleep(delayMs); } catch (InterruptedException ignored) { return; }
+                if (mManualDisconnect) return;
+                synchronized (mLock) {
+                    if (mClient != null && mClient.isAuthenticated()) {
+                        mReconnectAttempts = 0; // already back — reset counter
+                        return;
+                    }
+                    if (mConnecting) return;
+                }
+                String ssid = (mAppCtx != null) ? getSavedSsid(mAppCtx) : mSsid;
+                if (ssid == null || ssid.isEmpty()) return;
+                // Reset manual flag (this is an automatic reconnect, not user action)
+                connect(ssid, mAppCtx);
+            }
+        }, "botengine-reconnect-" + attempt).start();
     }
 
     public boolean isConnected() {
