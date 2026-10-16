@@ -295,6 +295,16 @@ public class QuotexWsClient {
                 sendWsText("42[\"account/change\",{\"demo\":1,\"tournamentId\":0}]");
                 // request instruments list
                 sendWsText("42[\"instruments/get\"]");
+                // v2.0.32: retry instruments/get after 15s if list is empty/small
+                // (server sometimes doesn't respond to first request)
+                final QuotexWsClient self = this;
+                new Thread(() -> {
+                    try { Thread.sleep(15000); } catch (InterruptedException ignored) { return; }
+                    if (!running.get() || !authenticated.get()) return;
+                    if (instrumentsCount < 20) {
+                        try { self.sendWsText("42[\"instruments/get\"]"); } catch (Exception ignored) {}
+                    }
+                }, "instruments-retry").start();
                 // re-follow assets (v2.0.5: full 3-step sequence)
                 for (String a : followedAssets) {
                     sendFollowSequence(a);
