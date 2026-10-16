@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.41';
+const APP_VERSION = '2.0.42';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1679,6 +1679,10 @@ function initSettings() {
 function renderAssetChips() {
   // Use real Quotex instruments with payouts if available, else fallback to hardcoded
   const instruments = S.qxInstruments && S.qxInstruments.length > 0 ? S.qxInstruments : null;
+  // v2.0.42: show LIVE streaming indicator — which pairs have recent ticks (analysis running)
+  const now = Date.now();
+  const prices = window._qxPrices || {};
+  let streamingCount = 0;
   let chipsHtml = '';
   if (instruments) {
     // Real pairs from Quotex with payout %
@@ -1686,9 +1690,15 @@ function renderAssetChips() {
       const name = inst.name || inst.asset || inst.symbol;
       const payout = inst.payout || inst.profit || 0;
       const selected = S.assets.includes(name);
-      return `<button class="chip ${selected ? 'on' : ''}" data-asset="${name}">${assetName(name)} <span class="payout">${payout}%</span></button>`;
+      // Check if this pair is actively streaming (tick within last 15 sec)
+      const norm = qxNormAsset(name);
+      const tick = prices[norm] || prices[name];
+      const isStreaming = tick && (now - tick.ts < 15000);
+      if (isStreaming) streamingCount++;
+      const liveDot = isStreaming ? '<span class="live-dot" title="Streaming live">🟢</span>' : '<span class="live-dot" title="No ticks yet">⚪</span>';
+      return `<button class="chip ${selected ? 'on' : ''}" data-asset="${name}">${liveDot} ${assetName(name)} <span class="payout">${payout}%</span></button>`;
     }).join('');
-    $('assetCount').textContent = `(${instruments.length} live from Quotex)`;
+    $('assetCount').textContent = `(${instruments.length} from Quotex • ${streamingCount} streaming)`;
   } else {
     // Fallback to hardcoded list
     chipsHtml = ALL_ASSETS.map(a => `
@@ -1705,6 +1715,12 @@ function renderAssetChips() {
     renderAssetChips();
   }));
 }
+// v2.0.42: auto-refresh streaming indicators every 5s (real-time, 0-delay feel)
+setInterval(() => {
+  try {
+    if (S.qxInstruments && S.qxInstruments.length > 0) renderAssetChips();
+  } catch (e) {}
+}, 5000);
 /* ---------- EXPIRY + FUTURE-TIMEFRAME CHIPS ---------- */
 const EXPIRY_OPTS = [{ s: 60, label: '1 min' }, { s: 120, label: '2 min' }, { s: 300, label: '5 min' }];
 function expiryLabel(sec) {
