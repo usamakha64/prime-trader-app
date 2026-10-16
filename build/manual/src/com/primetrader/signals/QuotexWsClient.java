@@ -801,6 +801,8 @@ public class QuotexWsClient {
         try {
             // v2.0.10: MERGE into payoutMap instead of overwriting (prevents 92->24 drop)
             // v2.0.30: accept instruments even without payout (default 0) — don't skip
+            // v2.0.36: collect new symbols to auto-follow (server's full list, not hardcoded)
+            java.util.List<String> newSymbols = new java.util.ArrayList<>();
             synchronized (payoutMap) {
                 for (int i = 0; i < list.length(); i++) {
                     try {
@@ -809,7 +811,11 @@ public class QuotexWsClient {
                         String sym = o.optString("asset", o.optString("symbol", o.optString("name", "")));
                         int payout = o.optInt("payout", o.optInt("profit", o.optInt("payout_percent", 0)));
                         if (!sym.isEmpty()) {
+                            boolean isNew = !payoutMap.containsKey(sym);
                             payoutMap.put(sym, Math.max(0, payout));
+                            if (isNew && !followedAssets.contains(sym)) {
+                                newSymbols.add(sym);
+                            }
                         }
                     } catch (Exception ignored) {}
                 }
@@ -817,6 +823,21 @@ public class QuotexWsClient {
             // Always publish from the merged map
             publishPayoutInstruments();
             lastInstrumentsTime = System.currentTimeMillis();
+            // v2.0.36: auto-follow ALL instruments from server (not just hardcoded 58)
+            // This discovers the 58-60 live pairs Quotex actually has
+            if (!newSymbols.isEmpty()) {
+                final java.util.List<String> toFollow = newSymbols;
+                new Thread(() -> {
+                    try {
+                        for (String sym : toFollow) {
+                            if (!running.get() || !authenticated.get()) break;
+                            if (followedAssets.contains(sym)) continue;
+                            try { sendFollowSequence(sym); } catch (Exception ignored) {}
+                            Thread.sleep(150);
+                        }
+                    } catch (Exception ignored) {}
+                }, "autofollow-server-pairs").start();
+            }
         } catch (Exception ignored) {}
     }
 
