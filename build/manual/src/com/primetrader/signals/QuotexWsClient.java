@@ -310,8 +310,10 @@ public class QuotexWsClient {
                     sendFollowSequence(a);
                 }
                 // v2.0.32: auto-follow comprehensive pairs list to discover ALL active pairs
+                // v2.0.41: PURE server-driven auto-detection — NO hardcoded list.
+                // Only follow assets the server actually sent in instruments/list.
+                // UI updates in real-time (0 delay) via onInstruments callback.
                 // (server only sends depth/change for followed assets)
-                autoFollowAllPairs();
                 // v2.0.6: balance doesn't come over ws in production - try REST digest
                 fetchBalanceRest();
                 safeCallback(() -> listener.onConnected(host));
@@ -768,10 +770,8 @@ public class QuotexWsClient {
 
     private void publishPayoutInstruments() {
         try {
-            // v2.0.8: throttle UI publishes to at most one per 3s
-            long now = System.currentTimeMillis();
-            if (now - lastPublishTime < 3000 && instrumentsCount > 0) return;
-            lastPublishTime = now;
+            // v2.0.41: NO throttle — 0 sec delay, UI updates instantly on every server push
+            lastPublishTime = System.currentTimeMillis();
             instrumentsJson = payoutInstrumentsJson();
             instrumentsCount = payoutMap.size();
             lastInstrumentsTime = System.currentTimeMillis();
@@ -960,34 +960,14 @@ public class QuotexWsClient {
 
     /** v2.0.32: Auto-follow comprehensive pairs list to discover ALL active pairs.
      * Server sends depth/change only for followed assets, so we follow them all. */
+    /**
+     * v2.0.41: PURE server-driven auto-detection.
+     * No hardcoded pair list. Assets are followed automatically when the server
+     * sends them via instruments/list (see storeInstruments v2.0.36 logic).
+     * This method is kept as a no-op for compatibility.
+     */
     private void autoFollowAllPairs() {
-        // Major forex, OTC variants, crypto, commodities — comprehensive Quotex list
-        // v2.0.40: expanded with OTC crypto pairs (from user's Telegram screenshots)
-        String[] pairs = {
-            "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","EURGBP","EURJPY","GBPJPY","NZDUSD",
-            "AUDCAD","AUDJPY","CADJPY","CHFJPY","EURAUD","EURCAD","EURNZD","GBPAUD","GBPCAD","GBPNZD",
-            "NZDCAD","NZDJPY","AUDNZD","CADCHF","EURCHF","GBPCHF","AUDCHF","NZDCHF",
-            "USDTRY","EURTRY","USDMXN","USDZAR","USDSGD","USDHKD",
-            "EURUSD_otc","GBPUSD_otc","USDJPY_otc","AUDUSD_otc","USDCAD_otc","USDCHF_otc","EURGBP_otc","EURJPY_otc",
-            "GBPJPY_otc","NZDUSD_otc","AUDCAD_otc","AUDJPY_otc","EURAUD_otc","EURCAD_otc","EURNZD_otc","GBPCAD_otc",
-            "GBPNZD_otc","CADJPY_otc","NZDJPY_otc","AUDNZD_otc","EURCHF_otc","GBPCHF_otc",
-            "BTCUSD","ETHUSD","LTCUSD","XRPUSD","DOGEUSD","ADAUSD","SOLUSD","BNBUSD",
-            "BTCUSD_otc","ETHUSD_otc","LTCUSD_otc","XRPUSD_otc","DOGEUSD_otc","ADAUSD_otc","SOLUSD_otc","BNBUSD_otc",
-            "BCHUSD_otc","DOTUSD_otc","TRUUSD_otc","ZECUSD_otc","AXSUSD_otc","DASUSD_otc","ATOUSD_otc","ETCUSD_otc",
-            "LINUSD_otc","AVAUSD_otc",
-            "XAUUSD","XAGUSD","USOIL","UKOIL","SP500","NAS100","US30","GER30","JPN225","AUS200"
-        };
-        new Thread(() -> {
-            try {
-                // Stagger follows to avoid overwhelming the server
-                for (String p : pairs) {
-                    if (!running.get() || !authenticated.get()) break;
-                    if (followedAssets.contains(p)) continue;
-                    try { sendFollowSequence(p); } catch (Exception ignored) {}
-                    Thread.sleep(200);
-                }
-            } catch (Exception ignored) {}
-        }, "autofollow-pairs").start();
+        // Intentionally empty — server drives all detection now.
     }
 
     public void disconnect() {
