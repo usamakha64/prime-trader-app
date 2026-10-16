@@ -1,5 +1,5 @@
 {
-  "version": "2.0.13",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.13/PrimeTrader.apk",
-  "changelog": "v2.0.13: Email/password login + historical candles for immediate signals."
+  "version": "2.0.14",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.14/PrimeTrader.apk",
+  "changelog": "v2.0.14: Email-only login (auto SSID) + pairs fixes."
 }
