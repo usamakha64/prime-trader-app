@@ -1,5 +1,5 @@
 {
-  "version": "2.0.8",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.8/PrimeTrader.apk",
-  "changelog": "v2.0.8: Full pairs list always synced to UI."
+  "version": "2.0.9",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.9/PrimeTrader.apk",
+  "changelog": "v2.0.9: Price-to-engine fix + pairs persist across reconnects."
 }
