@@ -945,6 +945,9 @@ public class QuotexWsClient {
             sendWsText("42[\"instruments/update\",{\"asset\":" + q + ",\"period\":60}]");
             sendWsText("42[\"chart_notification/get\",{\"asset\":" + q + ",\"version\":\"1.0.0\"}]");
             sendWsText("42[\"depth/follow\"," + q + "]");
+            // v2.0.44: explicit price-tick subscription (fixes white dots — server wasn't streaming quotes for all pairs)
+            sendWsText("42[\"quotes/follow\"," + q + "]");
+            sendWsText("42[\"tick/follow\"," + q + "]");
             // v2.0.13: fetch historical candles for immediate signals (like old bot)
             long nowSec = System.currentTimeMillis() / 1000;
             sendWsText("42[\"history/load\",{\"asset\":" + q + ",\"index\":0,\"time\":" + nowSec + ",\"offset\":3600,\"period\":60}]");
