@@ -617,6 +617,8 @@ public class MainActivity extends Activity {
                                                     toastOnUi("✅ Login! SSID mil gaya. Connecting…");
                                                     evalJs("if(window.onQuotexLogin)window.onQuotexLogin(true);");
                                                     BotEngine.get().connect(fSsid, MainActivity.this);
+                                                    // v2.0.34: start foreground service so connection survives backgrounding
+                                                    startBotService(fSsid);
                                                 } else {
                                                     toastOnUi("✅ Quotex login! Fetching balance...");
                                                     evalJs("if(window.onQuotexLogin)window.onQuotexLogin(true);");
@@ -668,6 +670,8 @@ public class MainActivity extends Activity {
                                 toastOnUi("✅ Login! Connecting...");
                                 evalJs("if(window.onQuotexLogin)window.onQuotexLogin(true);");
                                 BotEngine.get().connect(fSsid, MainActivity.this);
+                                // v2.0.34: start foreground service so connection survives backgrounding
+                                startBotService(fSsid);
                                 return;
                             }
                         } catch (Exception ex) {
