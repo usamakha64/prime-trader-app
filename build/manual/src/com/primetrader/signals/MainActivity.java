@@ -328,6 +328,52 @@ public class MainActivity extends Activity {
      */
     public class QuotexBridge {
 
+        /** v2.0.35: Send Telegram message via native Java HTTP (JS fetch is blocked in WebView).
+         * Returns "ok" on success, "error: ..." on failure. Runs synchronously (call off UI thread). */
+        @JavascriptInterface
+        public String sendTelegramNative(final String token, final String chatId, final String text) {
+            final String t = token == null ? "" : token.trim();
+            final String c = chatId == null ? "" : chatId.trim();
+            final String msg = text == null ? "" : text;
+            if (t.isEmpty() || c.isEmpty() || msg.isEmpty()) return "error: empty token/chat/text";
+            java.net.HttpURLConnection conn = null;
+            try {
+                java.net.URL url = new java.net.URL("https://api.telegram.org/bot" + t + "/sendMessage");
+                conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                org.json.JSONObject body = new org.json.JSONObject();
+                body.put("chat_id", c);
+                body.put("text", msg);
+                body.put("parse_mode", "HTML");
+                byte[] bytes = body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                java.io.OutputStream os = conn.getOutputStream();
+                os.write(bytes);
+                os.flush();
+                os.close();
+                int code = conn.getResponseCode();
+                if (code == 200) return "ok";
+                // read error body for diagnostics
+                String err = "";
+                try {
+                    java.io.InputStream es = conn.getErrorStream();
+                    if (es != null) {
+                        byte[] buf = new byte[500];
+                        int n = es.read(buf);
+                        if (n > 0) err = new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                } catch (Exception ignored) {}
+                return "error: HTTP " + code + " " + err;
+            } catch (Exception e) {
+                return "error: " + e.getMessage();
+            } finally {
+                if (conn != null) try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+
         /** REAL: authenticate with SSID, then start the foreground service so
          * the connection (and signal engine) survives backgrounding. */
         @JavascriptInterface

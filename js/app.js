@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.34';
+const APP_VERSION = '2.0.35';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1395,6 +1395,15 @@ const PTTelegram = {
       await new Promise(r => setTimeout(r, this._minGapMs - (nowMs - this._lastSent)));
     }
     this._lastSent = Date.now();
+    // v2.0.35: use native Java HTTP (JS fetch is blocked in WebView file:// origin)
+    try {
+      const n = qxNative();
+      if (n && typeof n.sendTelegramNative === 'function') {
+        const res = n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), text);
+        return res === 'ok';
+      }
+    } catch (e) {}
+    // fallback: JS fetch (may fail in WebView)
     try {
       const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
       const r = await fetch(url, {
@@ -1440,8 +1449,17 @@ const PTTelegram = {
   async sendStatus(text) { return this._post(text, true); },
 
   // v2.0.3: returns the REAL Telegram error so the user can fix token/chat
+  // v2.0.35: uses native Java HTTP (JS fetch blocked in WebView)
   async testSend() {
     if (!(S.tgToken && S.tgChat)) return { ok: false, detail: 'Token ya Chat ID khaali hai' };
+    try {
+      const n = qxNative();
+      if (n && typeof n.sendTelegramNative === 'function') {
+        const res = n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), '✅ Prime Trader test — Telegram kaam kar raha hai!');
+        if (res === 'ok') return { ok: true, detail: 'Test message bheja gaya!' };
+        return { ok: false, detail: res };
+      }
+    } catch (e) {}
     try {
       const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
       const r = await fetch(url, {
