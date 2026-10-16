@@ -1,5 +1,5 @@
 {
-  "version": "2.0.24",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.24/PrimeTrader.apk",
-  "changelog": "v2.0.24: Full account removal on Disconnect."
+  "version": "2.0.25",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.25/PrimeTrader.apk",
+  "changelog": "v2.0.25: Termux form-POST login flow in Java."
 }
