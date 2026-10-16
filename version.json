@@ -1,5 +1,5 @@
 {
-  "version": "2.0.19",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.19/PrimeTrader.apk",
-  "changelog": "v2.0.19: Visible login with auto-fill."
+  "version": "2.0.20",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.20/PrimeTrader.apk",
+  "changelog": "v2.0.20: Keyboard + auto-click login fix."
 }
