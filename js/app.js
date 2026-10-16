@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.49';
+const APP_VERSION = '2.0.50';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1386,6 +1386,45 @@ const PTWeb = {
     } catch (e) {}
   },
 
+  // v2.0.50: Backup candles to Supabase (survives app uninstall)
+  async backupCandles() {
+    try {
+      if (!window._qxCandles || Object.keys(window._qxCandles).length === 0) return;
+      var deviceId = 'default';
+      try { deviceId = localStorage.getItem('pt-device-id') || 'default'; } catch (e) {}
+      await fetch(PT_SB_URL + '/rest/v1/candle_backup', {
+        method: 'POST',
+        headers: Object.assign({}, PT_SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates' }),
+        body: JSON.stringify({
+          device_id: deviceId,
+          candles: window._qxCandles,
+          updated_at: new Date().toISOString()
+        })
+      });
+    } catch (e) {}
+  },
+
+  // v2.0.50: Restore candles from Supabase (if localStorage empty)
+  async restoreCandles() {
+    try {
+      var saved = null;
+      try { saved = localStorage.getItem('pt-candles-v1'); } catch (e) {}
+      if (saved) {
+        try { if (Object.keys(JSON.parse(saved)).length > 5) return true; } catch (e) {}
+      }
+      var deviceId = 'default';
+      try { deviceId = localStorage.getItem('pt-device-id') || 'default'; } catch (e) {}
+      var r = await fetch(PT_SB_URL + '/rest/v1/candle_backup?device_id=eq.' + encodeURIComponent(deviceId) + '&select=candles');
+      var arr = await r.json();
+      if (arr && arr.length > 0 && arr[0].candles) {
+        window._qxCandles = arr[0].candles;
+        try { localStorage.setItem('pt-candles-v1', JSON.stringify(window._qxCandles)); } catch (e) {}
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  },
+
   // retry queued publishes (call periodically / on reconnect)
   async flushQueue() {
     if (this._syncing || !this._queue.length) return;
@@ -2154,6 +2193,10 @@ function init() {
   setTimeout(drawCharts, 120);
   // Phase 3: start the real 7-indicator signal engine timers (runs only when connected)
   startSignalEngine();
+  // v2.0.50: Restore candles from Supabase cloud backup (survives reinstall)
+  setTimeout(() => { try { PTWeb.restoreCandles(); } catch (e) {} }, 2000);
+  // v2.0.50: Backup candles to Supabase every 5 min
+  setInterval(() => { try { PTWeb.backupCandles(); } catch (e) {} }, 300000);
   // v2.0.39: AUTO-LOGIN on startup — if SSID is saved, connect automatically.
   // User never has to tap "Login & Connect" again (unless SSID expires).
   setTimeout(() => {
