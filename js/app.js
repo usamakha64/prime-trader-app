@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.39';
+const APP_VERSION = '2.0.40';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -609,11 +609,15 @@ function openAccountModal() {
       $('mConfirmReal').addEventListener('click', () => {
         S = store.set({ account: 'real' }); renderAcct(); closeModal();
         toast('💰 <b>Switched to REAL account.</b> Trade carefully!', 'red');
+        // v2.0.40: Telegram notify on account switch
+        try { if (S.tgStatus) PTTelegram.sendStatus('💰 <b>Switched to REAL account</b>\nTime: ' + PTTelegram.fmtTime(new Date())); } catch (e) {}
       });
       return;
     }
     S = store.set({ account: k }); renderAcct(); closeModal();
     toast(`${ACCTS[k].ico} <b>Switched to ${ACCTS[k].name}.</b>`, 'gold');
+    // v2.0.40: Telegram notify on account switch
+    try { if (S.tgStatus) PTTelegram.sendStatus(`${ACCTS[k].ico} <b>Switched to ${ACCTS[k].name} account</b>\nTime: ` + PTTelegram.fmtTime(new Date())); } catch (e) {}
   }));
 }
 $('acctChip').addEventListener('click', openAccountModal);

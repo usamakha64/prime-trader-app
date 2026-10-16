@@ -962,13 +962,19 @@ public class QuotexWsClient {
      * Server sends depth/change only for followed assets, so we follow them all. */
     private void autoFollowAllPairs() {
         // Major forex, OTC variants, crypto, commodities — comprehensive Quotex list
+        // v2.0.40: expanded with OTC crypto pairs (from user's Telegram screenshots)
         String[] pairs = {
             "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","EURGBP","EURJPY","GBPJPY","NZDUSD",
             "AUDCAD","AUDJPY","CADJPY","CHFJPY","EURAUD","EURCAD","EURNZD","GBPAUD","GBPCAD","GBPNZD",
             "NZDCAD","NZDJPY","AUDNZD","CADCHF","EURCHF","GBPCHF","AUDCHF","NZDCHF",
+            "USDTRY","EURTRY","USDMXN","USDZAR","USDSGD","USDHKD",
             "EURUSD_otc","GBPUSD_otc","USDJPY_otc","AUDUSD_otc","USDCAD_otc","USDCHF_otc","EURGBP_otc","EURJPY_otc",
-            "GBPJPY_otc","NZDUSD_otc","AUDCAD_otc","AUDJPY_otc","EURAUD_otc","EURCAD_otc",
+            "GBPJPY_otc","NZDUSD_otc","AUDCAD_otc","AUDJPY_otc","EURAUD_otc","EURCAD_otc","EURNZD_otc","GBPCAD_otc",
+            "GBPNZD_otc","CADJPY_otc","NZDJPY_otc","AUDNZD_otc","EURCHF_otc","GBPCHF_otc",
             "BTCUSD","ETHUSD","LTCUSD","XRPUSD","DOGEUSD","ADAUSD","SOLUSD","BNBUSD",
+            "BTCUSD_otc","ETHUSD_otc","LTCUSD_otc","XRPUSD_otc","DOGEUSD_otc","ADAUSD_otc","SOLUSD_otc","BNBUSD_otc",
+            "BCHUSD_otc","DOTUSD_otc","TRUUSD_otc","ZECUSD_otc","AXSUSD_otc","DASUSD_otc","ATOUSD_otc","ETCUSD_otc",
+            "LINUSD_otc","AVAUSD_otc",
             "XAUUSD","XAGUSD","USOIL","UKOIL","SP500","NAS100","US30","GER30","JPN225","AUS200"
         };
         new Thread(() -> {
