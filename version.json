@@ -1,5 +1,5 @@
 {
-  "version": "2.0.12",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.12/PrimeTrader.apk",
-  "changelog": "v2.0.12: Balance string parsing + pairs disk persistence."
+  "version": "2.0.13",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.13/PrimeTrader.apk",
+  "changelog": "v2.0.13: Email/password login + historical candles for immediate signals."
 }
