@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.51';
+const APP_VERSION = '2.0.66';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -630,14 +630,6 @@ function qxIsConnected() {
   const n = qxNative();
   try { return n ? !!n.isConnected() : false; } catch (e) { return false; }
 }
-// Show/hide SSID toggle
-$('btnSsidToggle').addEventListener('click', () => {
-  const inp = $('inSsid');
-  const show = inp.type === 'password';
-  inp.type = show ? 'text' : 'password';
-  $('btnSsidToggle').textContent = show ? '🙈' : '👁️';
-  $('btnSsidToggle').setAttribute('aria-label', show ? 'Hide SSID' : 'Show SSID');
-});
 // Refresh SSID status UI from state
 function renderSsid() {
   const has = !!(S.ssid && S.ssid.length > 8);
@@ -647,11 +639,9 @@ function renderSsid() {
   else if (has) { st.className = 'pill pill-gold'; st.textContent = '● Saved — not connected'; }
   else { st.className = 'pill pill-red'; st.textContent = '● Not set'; }
   $('ssidAge').textContent = S.ssidSavedAt ? ('Saved ' + S.ssidSavedAt) : '';
-  $('btnDisconnectSsid').style.display = has ? '' : 'none';
-  $('btnCopySsid').style.display = has ? '' : 'none';
-  // mask indicator: show placeholder when an SSID is stored
-  if (has && !$('inSsid').value) $('inSsid').placeholder = '•••••••• SSID saved — paste new to replace';
-  else if (!has) $('inSsid').placeholder = 'Paste new SSID here';
+  // v2.0.56: Disconnect button always visible, styled like other ghost buttons
+  var btnDis = $('btnDisconnectSsid');
+  if (btnDis) btnDis.style.display = '';
   // v2.0.16: restore saved email
   try {
     const qe = $('inQxEmail');
@@ -692,32 +682,6 @@ if (btnQxLogin) btnQxLogin.addEventListener('click', () => {
     toast('📱 <b>Saved.</b> Real login works inside the Android app.', 'green');
   }
 });
-// Save & Connect — v2.0.28: Termux jaisa manual SSID flow (fallback)
-$('btnSaveSsid').addEventListener('click', () => {
-  const v = $('inSsid').value.trim();
-  if (!v) { toast('⚠️ SSID dalo — Chrome console se copy karke paste karo', 'red'); return; }
-  if (v.length < 8) { toast('⚠️ SSID looks too short', 'red'); return; }
-  S = store.set({ ssid: v, ssidSavedAt: new Date().toLocaleString() });
-  $('inSsid').value = '';
-  $('inSsid').type = 'password'; $('btnSsidToggle').textContent = '👁️';
-  // v2.0.13: save Quotex email/password locally (Termux .env jaisa — sirf phone me)
-  const qe = $('inQxEmail'), qp = $('inQxPass');
-  const email = qe ? qe.value.trim() : '', pass = qp ? qp.value : '';
-  if (email) { try { localStorage.setItem('qx_email', email); } catch (e) {} }
-  const n2 = qxNative();
-  if (email && pass && n2 && typeof n2.saveQxCreds === 'function') {
-    try { n2.saveQxCreds(email, pass); } catch (e) {}
-  }
-  toast('🔑 <b>Connecting…</b>', 'gold');
-  renderSsid();
-  const n = qxNative();
-  if (n) {
-    try { n.connect(v); } catch (e) { toast('⚠️ Native connect failed: ' + e.message, 'red'); }
-    setTimeout(renderSsid, 2500);
-  } else {
-    toast('📱 <b>Saved.</b> Real connection works inside the Android app.', 'green');
-  }
-});
 // Disconnect — v2.0.24: also clears email/password (full account removal)
 $('btnDisconnectSsid').addEventListener('click', () => {
   const n = qxNative();
@@ -742,24 +706,6 @@ $('btnDisconnectSsid').addEventListener('click', () => {
 window.onQuotexLogin = function (ok) {
   if (ok) toast('✅ <b>Quotex login!</b> Balance aa raha hai…', 'green');
 };
-// Copy SSID
-$('btnCopySsid').addEventListener('click', () => {
-  if (S.ssid) {
-    navigator.clipboard.writeText(S.ssid).then(() => {
-      toast('📋 <b>SSID copied!</b>', 'green');
-    }).catch(() => {
-      toast('❌ Copy failed', 'red');
-    });
-  }
-});
-// Copy SSID console command
-$('btnCopySsidCmd').addEventListener('click', () => {
-  navigator.clipboard.writeText('copy(window.settings.token)').then(() => {
-    toast('📋 <b>Command copied!</b> Chrome console me paste karo.', 'green');
-  }).catch(() => {
-    toast('❌ Copy failed', 'red');
-  });
-});
 // v2.0.1: Connection Diagnostics — Settings panel me asal haalat dikhata hai
 function renderDiagnostics() {
   var box = $('diagBox');
@@ -784,6 +730,77 @@ function renderDiagnostics() {
   lines.push('🔑 Akhri kamyab login: ' + age(c.lastAuthAgeSec));
   if (c.lastError) lines.push('❌ Akhri error: ' + c.lastError);
   if (!d.connected && !d.connecting) lines.push('\n💡 Hal: naya SSID nikalo aur Save & Connect dabao.');
+  box.textContent = lines.join('\n');
+}
+// v2.0.52: Signal Engine Debug — why no signals?
+function renderSignalDebug() {
+  var box = $('diagBox');
+  if (!box) return;
+  var lines = [];
+  lines.push('🔍 SIGNAL ENGINE DEBUG');
+  lines.push('━━━━━━━━━━━━━━━');
+  // 1. Engine owner?
+  var isOwner = false;
+  try { isOwner = qxEngineOwner(); } catch (e) { lines.push('❌ qxEngineOwner error: ' + e.message); }
+  lines.push('👑 Engine Owner: ' + (isOwner ? 'YES ✅ (this WebView)' : 'NO ❌ (other WebView owns it)'));
+  // 2. Engine ready?
+  var isReady = false;
+  try { isReady = qxEngineReady(); } catch (e) { lines.push('❌ qxEngineReady error: ' + e.message); }
+  lines.push('🚀 Engine Ready: ' + (isReady ? 'YES ✅' : 'NO ❌ (not connected or stopped)'));
+  // 3. Settings
+  lines.push('');
+  lines.push('⚙️ Min Confidence: ' + (S.minConf || 0) + '% | Min Payout: ' + (S.minPayout || 0) + '% | Gap: ' + (S.sigGap || 0) + 's');
+  // 4. Check each ready pair
+  lines.push('');
+  lines.push('📊 Ready pairs (61+ candles) analysis:');
+  var assets = S.assets || [];
+  var readyCount = 0, noneCount = 0, filteredCount = 0;
+  var minConf = +S.minConf || 0;
+  var minPayout = +S.minPayout || 0;
+  var knowPayouts = (S.qxInstruments || []).length > 0;
+  for (var i = 0; i < Math.min(assets.length, 15); i++) {
+    var asset = assets[i];
+    var candles = (window._qxCandles && window._qxCandles[qxNormAsset(asset)]) || [];
+    if (candles.length < 61) continue;
+    readyCount++;
+    // Payout filter check
+    if (knowPayouts && qxPayout(asset) < minPayout) {
+      filteredCount++;
+      lines.push('  ⏭️ ' + asset + ': SKIP (payout ' + qxPayout(asset) + '% < ' + minPayout + '%)');
+      continue;
+    }
+    // Analyze
+    var r;
+    try { r = analyzeAsset(asset); }
+    catch (e) { lines.push('  ❌ ' + asset + ': ERROR ' + e.message); continue; }
+    if (r.signal === 'NONE') {
+      noneCount++;
+      var reason = r.reason || 'no setup';
+      // Add indicator details if available
+      if (r.details) {
+        var d = r.details;
+        reason += ' [EMA9:' + (d.ema9 ? d.ema9.toFixed(5) : '?') + ' EMA21:' + (d.ema21 ? d.ema21.toFixed(5) : '?') + ' EMA50:' + (d.ema50 ? d.ema50.toFixed(5) : '?') + ' RSI:' + d.rsi + ' ADX:' + d.adx + ']';
+      }
+      lines.push('  ⚪ ' + asset + ': NONE (' + reason + ')');
+    } else {
+      var pass = r.conf >= minConf ? '✅ PASS' : '❌ FAIL (conf ' + r.conf + '% < ' + minConf + '%)';
+      lines.push('  🟢 ' + asset + ': ' + r.signal + ' ' + r.conf + '% ' + pass);
+    }
+  }
+  lines.push('');
+  lines.push('📈 Summary: ' + readyCount + ' ready, ' + noneCount + ' NONE, ' + filteredCount + ' filtered');
+  if (readyCount > 0 && noneCount === readyCount) {
+    lines.push('');
+    lines.push('💡 Sab NONE = strategy ko setup nahi mil raha. Market flat ho sakta hai.');
+  }
+  if (!isOwner) {
+    lines.push('');
+    lines.push('⚠️ YE MASLA HAI! Engine owner nahi ho — dusra WebView signals bana raha hoga.');
+  }
+  if (!isReady) {
+    lines.push('');
+    lines.push('⚠️ Engine ready nahi — connected? stopped?');
+  }
   box.textContent = lines.join('\n');
 }
 // SSID expiry hook (wired to native QuotexWsClient onAuthFailed)
@@ -841,31 +858,28 @@ window.onQxBalance = function (demo, live, currency) {
 window.onQxInstruments = function (jsonStr) {
   try {
     const arr = JSON.parse(jsonStr);
-    // v2.0.4: pairs refresh often (live payouts) — toast only on first load / count change
-    const first = !S.qxInstruments || S.qxInstruments.length === 0;
-    const countChanged = S.qxInstruments && S.qxInstruments.length !== arr.length;
     S = store.set({ qxInstruments: arr });
-    if (first || countChanged) toast('📊 <b>' + arr.length + ' pairs</b> loaded from Quotex', 'green');
     renderAssetChips();
+    // v2.0.59: ONE debounced toast when the instruments list settles.
+    // Chunks arrive over ~60s; toasting per count-change caused spam
+    // ("887 pairs", "888 pairs"...). Debounce 6s and toast only if the
+    // settled count differs from the last toasted count.
+    if (window._qxInstrToastT) clearTimeout(window._qxInstrToastT);
+    window._qxInstrToastT = setTimeout(function() {
+      try {
+        var n = (S.qxInstruments || []).length;
+        if (n !== window._qxInstrLastToastN) {
+          window._qxInstrLastToastN = n;
+          toast('📊 <b>' + n + ' pairs</b> loaded from Quotex', 'green');
+        }
+      } catch (e) {}
+    }, 6000);
   } catch (e) {}
 };
-// v2.0.43: Load saved candles from localStorage on startup (survives app updates)
-try {
-  var savedCandles = localStorage.getItem('pt-candles-v1');
-  if (savedCandles) {
-    window._qxCandles = JSON.parse(savedCandles);
-    console.log('[candles] Restored from storage:', Object.keys(window._qxCandles).length, 'pairs');
-  }
-} catch (e) { console.log('[candles] Restore failed:', e); }
-
-// v2.0.43: Save candles to localStorage every 30s (max ~400KB)
-setInterval(() => {
-  try {
-    if (window._qxCandles && Object.keys(window._qxCandles).length > 0) {
-      localStorage.setItem('pt-candles-v1', JSON.stringify(window._qxCandles));
-    }
-  } catch (e) {}
-}, 30000);
+// v2.0.56: Direct-cloud candles — NO localStorage, NO backup/restore.
+// Candles live in Supabase (candle_backup table) as PRIMARY storage.
+// Loaded via PTWeb.loadCandles() at startup (see init section below),
+// saved via PTWeb.saveCandles() every 30s. Updates/reinstalls lose nothing.
 
 // Called by native for every real price tick: onPriceTick(asset, timestampMs, price)
 window.onPriceTick = function (asset, ts, price) {
@@ -873,22 +887,31 @@ window.onPriceTick = function (asset, ts, price) {
     if (!window._qxPrices) window._qxPrices = {};
     var norm = qxNormAsset(asset);
     window._qxPrices[norm] = { ts: ts, price: price };
-    // --- build 1-minute candles for the Phase 3 signal engine ---
-    if (!window._qxCandles) window._qxCandles = {};
-    var bucket = Math.floor(ts / 60000) * 60000;
-    var arr = window._qxCandles[norm];
-    if (!arr) arr = window._qxCandles[norm] = [];
-    var last = arr[arr.length - 1];
-    if (last && last.t === bucket) {
-      if (price > last.h) last.h = price;
-      if (price < last.l) last.l = price;
-      last.c = price;
-    } else {
-      arr.push({ t: bucket, o: price, h: price, l: price, c: price });
-      if (arr.length > 150) arr.splice(0, arr.length - 150); // keep ~2.5h of 1m candles
-    }
+    // v2.0.60: candles are built in native Java (CandleStore, owned by
+    // BotEngine) — the single source of truth that keeps working in the
+    // background. JS only MIRRORS them via syncCandlesFromJava() below.
+    // Independent JS candle building was removed: it caused the split-brain
+    // / "progress disappears in background" bug (Chromium freezes JS timers
+    // in hidden/background WebViews).
   } catch (e) {}
 };
+
+// v2.0.60: mirror native-Java candles into window._qxCandles (read-only).
+// Called every 10s and whenever the app returns to the foreground.
+function syncCandlesFromJava() {
+  try {
+    var n = (typeof QuotexNative !== 'undefined') ? QuotexNative : null;
+    if (!n || typeof n.getCandlesJson !== 'function') return false;
+    var s = n.getCandlesJson();
+    if (!s) return false;
+    var obj = JSON.parse(s);
+    if (obj && typeof obj === 'object') {
+      window._qxCandles = obj;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
 
 /* ============================================================
    PHASE 3 — REAL 7-INDICATOR SIGNAL ENGINE
@@ -1117,16 +1140,26 @@ function qxLoadHistory() {
             candles.push({ t: bucket, o: o, h: h, l: l, c: cl });
           }
           if (candles.length > 10) {
-            // Merge with existing (don't duplicate)
-            var existing = window._qxCandles[norm] || [];
-            var seen = {};
-            for (var k = 0; k < existing.length; k++) seen[existing[k].t] = 1;
-            for (var k = 0; k < candles.length; k++) {
-              if (!seen[candles[k].t]) existing.push(candles[k]);
-            }
-            existing.sort(function(a, b) { return a.t - b.t; });
-            if (existing.length > 150) existing.splice(0, existing.length - 150);
-            window._qxCandles[norm] = existing;
+            // v2.0.60: push history into the native Java CandleStore (single
+            // source of truth) instead of the JS heap — the 10s mirror picks
+            // it up for the UI/signal engine. Dedup happens in Java.
+            try {
+              if (n && typeof n.pushHistoryCandles === 'function') {
+                n.pushHistoryCandles(norm, JSON.stringify(candles));
+                setTimeout(function () { try { syncCandlesFromJava(); } catch (e) {} }, 1500);
+              } else {
+                // Fallback (old bridge): merge into JS heap directly.
+                var existing = window._qxCandles[norm] || [];
+                var seen = {};
+                for (var k = 0; k < existing.length; k++) seen[existing[k].t] = 1;
+                for (var k = 0; k < candles.length; k++) {
+                  if (!seen[candles[k].t]) existing.push(candles[k]);
+                }
+                existing.sort(function(a, b) { return a.t - b.t; });
+                if (existing.length > 150) existing.splice(0, existing.length - 150);
+                window._qxCandles[norm] = existing;
+              }
+            } catch (e) {}
           }
         } catch (e) {}
       })(as[i]);
@@ -1386,42 +1419,99 @@ const PTWeb = {
     } catch (e) {}
   },
 
-  // v2.0.50: Backup candles to Supabase (survives app uninstall)
-  async backupCandles() {
+  // v2.0.56: DIRECT-CLOUD candles — Supabase IS the primary storage.
+  // No localStorage, no backup/restore. Called every 30s from init.
+  async saveCandles() {
+    if (this._saving) return false; // debounce: skip while a save is in flight
+    // v2.0.57 SAFETY: never save before the initial cloud load succeeded.
+    // The v2.0.56 bug overwrote 64 good cloud candles with 2 local ones because
+    // the 30s save timer fired before loadCandles() finished.
+    if (!this._cloudLoaded) {
+      console.log('[PT] Candle cloud-save SKIPPED: cloud not loaded yet');
+      return false;
+    }
     try {
-      if (!window._qxCandles || Object.keys(window._qxCandles).length === 0) return;
+      if (!window._qxCandles) return false;
+      var localPairs = Object.keys(window._qxCandles).length;
+      // v2.0.57 SAFETY: never overwrite cloud with near-empty local data.
+      if (localPairs < 5) {
+        console.log('[PT] Candle cloud-save SKIPPED: only ' + localPairs + ' local pairs');
+        return false;
+      }
+      this._saving = true;
       var deviceId = 'default';
       try { deviceId = localStorage.getItem('pt-device-id') || 'default'; } catch (e) {}
-      await fetch(PT_SB_URL + '/rest/v1/candle_backup', {
+      // v2.0.57: fetch cloud first, merge per-pair keeping the LONGER array,
+      // so we can never shrink cloud data — only grow it.
+      var merged = {};
+      try {
+        var r = await fetch(PT_SB_URL + '/rest/v1/candle_backup?device_id=eq.' + encodeURIComponent(deviceId) + '&select=candles');
+        var arr = await r.json();
+        if (arr && arr.length > 0 && arr[0].candles) {
+          var cloud = arr[0].candles;
+          for (var k in cloud) merged[k] = cloud[k];
+        }
+      } catch (e) {
+        console.log('[PT] Candle cloud-save: could not fetch cloud for merge: ' + e.message);
+      }
+      for (var k2 in window._qxCandles) {
+        var lArr = window._qxCandles[k2] || [], cArr = merged[k2] || [];
+        merged[k2] = (lArr.length >= cArr.length) ? lArr : cArr;
+      }
+      var totalCandles = 0, pairCount = 0;
+      for (var k3 in merged) { pairCount++; totalCandles += (merged[k3] || []).length; }
+      var res = await fetch(PT_SB_URL + '/rest/v1/candle_backup', {
         method: 'POST',
         headers: Object.assign({}, PT_SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates' }),
         body: JSON.stringify({
           device_id: deviceId,
-          candles: window._qxCandles,
+          candles: merged,
           updated_at: new Date().toISOString()
         })
       });
-    } catch (e) {}
+      this._saving = false;
+      if (!res.ok) {
+        console.log('[PT] Candle cloud-save FAILED: HTTP ' + res.status);
+        return false;
+      }
+      console.log('[PT] Candle cloud-save OK: ' + pairCount + ' pairs, ' + totalCandles + ' candles');
+      return true;
+    } catch (e) {
+      this._saving = false;
+      console.log('[PT] Candle cloud-save ERROR: ' + e.message);
+      return false;
+    }
   },
 
-  // v2.0.50: Restore candles from Supabase (if localStorage empty)
-  async restoreCandles() {
+  // v2.0.56: Load candles DIRECTLY from Supabase on startup.
+  // Merges per-pair: keeps whichever array is longer (cloud vs ticks built during load).
+  async loadCandles() {
     try {
-      var saved = null;
-      try { saved = localStorage.getItem('pt-candles-v1'); } catch (e) {}
-      if (saved) {
-        try { if (Object.keys(JSON.parse(saved)).length > 5) return true; } catch (e) {}
-      }
       var deviceId = 'default';
       try { deviceId = localStorage.getItem('pt-device-id') || 'default'; } catch (e) {}
       var r = await fetch(PT_SB_URL + '/rest/v1/candle_backup?device_id=eq.' + encodeURIComponent(deviceId) + '&select=candles');
       var arr = await r.json();
+      // v2.0.57: fetch succeeded (even with no rows) = cloud is reachable.
+      // Mark loaded so the save interval can start; the saveCandles() safety
+      // checks (min 5 local pairs + per-pair merge) still prevent empty overwrites.
+      this._cloudLoaded = true;
       if (arr && arr.length > 0 && arr[0].candles) {
-        window._qxCandles = arr[0].candles;
-        try { localStorage.setItem('pt-candles-v1', JSON.stringify(window._qxCandles)); } catch (e) {}
+        var cloud = arr[0].candles;
+        if (!window._qxCandles) window._qxCandles = {};
+        var pairs = 0;
+        for (var k in cloud) {
+          var cArr = cloud[k] || [], lArr = window._qxCandles[k] || [];
+          window._qxCandles[k] = (cArr.length >= lArr.length) ? cArr : lArr;
+          pairs++;
+        }
+        console.log('[PT] Candles loaded from cloud:', pairs, 'pairs');
         return true;
       }
-    } catch (e) {}
+      console.log('[PT] Cloud reachable, no candle rows yet — starting fresh');
+      return true;
+    } catch (e) {
+      console.log('[PT] Candle cloud-load ERROR: ' + e.message);
+    }
     return false;
   },
 
@@ -1700,19 +1790,6 @@ function initSettings() {
   // v2.0.1: connection diagnostics
   var btnDiag = $('btnDiagRefresh');
   if (btnDiag) btnDiag.addEventListener('click', renderDiagnostics);
-  // v2.0.3: copy raw diagnostics JSON to clipboard — user pastes it in chat
-  var btnCopy = $('btnDiagCopy');
-  if (btnCopy) btnCopy.addEventListener('click', function () {
-    var n = qxNative();
-    var txt = 'no native bridge';
-    try { txt = n && n.getDiagnostics ? n.getDiagnostics() : txt; } catch (e) { txt = 'error: ' + e.message; }
-    var done = function (ok) { toast(ok ? '📋 Report copy ho gayi — mujhe chat me paste kardo' : '❌ Copy nahi hui', ok ? 'green' : 'red'); };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(txt).then(function () { done(true); }, function () { done(false); });
-      } else { done(false); }
-    } catch (e) { done(false); }
-  });
   // v2.0.47: Tick Report — which pairs are getting ticks
   var btnTick = $('btnTickReport');
   if (btnTick) btnTick.addEventListener('click', function () {
@@ -1749,28 +1826,6 @@ function initSettings() {
       } catch (e) { toast(msg.substring(0, 200), 'green'); }
     } catch (e) { toast('❌ Error: ' + e.message, 'red'); }
   });
-  // v2.0.49: Candle Report — warmup status per pair
-  var btnCandle = document.createElement('button');
-  btnCandle.className = 'btn btn-ghost btn-block mt1';
-  btnCandle.id = 'btnCandleReport';
-  btnCandle.textContent = '🕯️ Candle Report (warmup)';
-  btnCandle.addEventListener('click', function () {
-    try {
-      var candles = window._qxCandles || {};
-      var keys = Object.keys(candles);
-      if (keys.length === 0) { toast('⚠️ Koi candles nahi — pehle connect karo', 'yellow'); return; }
-      var ready = 0;
-      keys.forEach(k => { if (candles[k].length >= 61) ready++; });
-      var msg = '🕯️ Candle Report: ' + ready + '/' + keys.length + ' ready (61+)\n\n';
-      keys.sort((a,b) => candles[b].length - candles[a].length).slice(0,15).forEach(k => {
-        msg += k + ': ' + candles[k].length + '/61\n';
-      });
-      if (navigator.clipboard) navigator.clipboard.writeText(msg);
-      toast('📋 Candle Report copied! (' + ready + ' ready)', 'green');
-    } catch(e) { toast('❌ ' + e.message, 'red'); }
-  });
-  var tickBtn = $('btnTickReport');
-  if (tickBtn && tickBtn.parentNode) tickBtn.parentNode.insertBefore(btnCandle, tickBtn.nextSibling);
   var btnTg = $('btnTgTest');
   if (btnTg) btnTg.addEventListener('click', function () {
     toast('✈️ Telegram test bheja ja raha hai...', 'gold');
@@ -1778,6 +1833,9 @@ function initSettings() {
       toast((res.ok ? '✅ ' : '❌ ') + res.detail, res.ok ? 'green' : 'red');
     });
   });
+  // v2.0.52: Signal Engine Debug — why no signals?
+  var btnSigDbg = $('btnSignalDebug');
+  if (btnSigDbg) btnSigDbg.addEventListener('click', function () { renderSignalDebug(); });
   // assets
   renderAssetChips();
   // expiry + future timeframes
@@ -2202,10 +2260,39 @@ function init() {
   setTimeout(drawCharts, 120);
   // Phase 3: start the real 7-indicator signal engine timers (runs only when connected)
   startSignalEngine();
-  // v2.0.50: Restore candles from Supabase cloud backup (survives reinstall)
-  setTimeout(() => { try { PTWeb.restoreCandles(); } catch (e) {} }, 2000);
-  // v2.0.50: Backup candles to Supabase every 5 min
-  setInterval(() => { try { PTWeb.backupCandles(); } catch (e) {} }, 300000);
+  // v2.0.60: DIRECT-CLOUD candles — native Java (CandleStore +
+  // ScheduledExecutorService in BotEngine) now OWNS candle building and the
+  // 30s Supabase save, so they keep working in the background. JS only:
+  //   (1) loads candles from Supabase once at startup (fast initial paint),
+  //   (2) mirrors the Java store into window._qxCandles every 10s + on
+  //       foreground return (read-only — no independent JS candle building,
+  //       which caused the split-brain background progress-loss bug).
+  // The old v2.0.57 JS 30s save interval is GONE (Java owns saving now).
+  (function startCloudCandleSync() {
+    function tryLoad() {
+      var p = null;
+      try { p = PTWeb.loadCandles(); } catch (e) { p = null; }
+      Promise.resolve(p).then(function (ok) {
+        if (ok) {
+          console.log('[PT] Cloud candles loaded (initial) — Java owns saving now');
+          try { syncCandlesFromJava(); } catch (e) {}
+        } else {
+          console.log('[PT] Cloud candle load failed — retrying in 10s');
+          setTimeout(tryLoad, 10000);
+        }
+      }).catch(function () {
+        setTimeout(tryLoad, 10000);
+      });
+    }
+    setTimeout(tryLoad, 2000);
+    // v2.0.60: mirror Java candles into JS every 10s (UI + signal engine read-only)
+    setInterval(function () { try { syncCandlesFromJava(); } catch (e) {} }, 10000);
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { try { syncCandlesFromJava(); } catch (e) {} }
+      });
+    } catch (e) {}
+  })();
   // v2.0.39: AUTO-LOGIN on startup — if SSID is saved, connect automatically.
   // User never has to tap "Login & Connect" again (unless SSID expires).
   setTimeout(() => {

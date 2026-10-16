@@ -88,6 +88,8 @@ public class QuotexWsClient {
     private volatile String lastAuthSnippet = "";
     // v2.0.2: true after a 451- instruments placeholder, until payload arrives
     private volatile boolean instrumentsPending = false;
+    // v2.0.58: shape of the last instruments payload (for diagnostics)
+    private volatile String lastInstrumentsShape = "";
     // v2.0.3: ring buffer of recent inbound messages for debugging (SSID redacted)
     private final java.util.ArrayDeque<String> recentMessages = new java.util.ArrayDeque<>();
     // v2.0.4: depth/change carries live [symbol, payout] pairs (binary event)
@@ -149,6 +151,7 @@ public class QuotexWsClient {
             o.put("tickCount", tickCount);
             o.put("lastTickAgeSec", lastTickTime > 0 ? (System.currentTimeMillis() - lastTickTime) / 1000 : -1);
             o.put("instrumentsCount", instrumentsCount);
+            o.put("lastInstrumentsShape", lastInstrumentsShape); // v2.0.58
             o.put("lastAuthAgeSec", lastAuthTime > 0 ? (System.currentTimeMillis() - lastAuthTime) / 1000 : -1);
             o.put("lastError", lastError);
             o.put("lastAuthSnippet", lastAuthSnippet);
@@ -280,6 +283,16 @@ public class QuotexWsClient {
                 catch (Exception ignored) { lastAuthSnippet = ""; }
                 parseAuthSuccess(msg);
                 authenticated.set(true);
+                // v2.0.64: PURGE corrupt symbols on every fresh auth (clears
+                // v2.0.60 ghost entries like ATOUSD_otc from payoutMap)
+                try {
+                    synchronized (payoutMap) {
+                        java.util.Iterator<String> it = payoutMap.keySet().iterator();
+                        while (it.hasNext()) {
+                            if (!isValidSymbol(it.next())) it.remove();
+                        }
+                    }
+                } catch (Exception ignored) {}
                 connectedHost = host;
                 ssl.setSoTimeout(60000);
                 startReader(pingInterval);
@@ -295,7 +308,11 @@ public class QuotexWsClient {
                 sendWsText("42[\"account/change\",{\"demo\":1,\"tournamentId\":0}]");
                 // request instruments list
                 sendWsText("42[\"instruments/get\"]");
-                // v2.0.32: retry instruments/get after 15s if list is empty/small
+                // v2.0.58: ALSO request in the website's format — instruments/get
+                // now returns only ~10 majors; instruments/list with placeholder
+                // returns the full 50+ list (OTC/crypto/commodities) like quotex.com.
+                sendWsText("42[\"instruments/list\",{\"_placeholder\":true,\"num\":0}]");
+                // v2.0.32: retry instruments requests after 15s if list is empty/small
                 // (server sometimes doesn't respond to first request)
                 final QuotexWsClient self = this;
                 new Thread(() -> {
@@ -303,8 +320,21 @@ public class QuotexWsClient {
                     if (!running.get() || !authenticated.get()) return;
                     if (instrumentsCount < 20) {
                         try { self.sendWsText("42[\"instruments/get\"]"); } catch (Exception ignored) {}
+                        try { self.sendWsText("42[\"instruments/list\",{\"_placeholder\":true,\"num\":0}]"); } catch (Exception ignored) {}
                     }
                 }, "instruments-retry").start();
+                // v2.0.58: periodic instruments refresh (every 5 min) to pick up
+                // newly listed pairs while the app runs.
+                new Thread(() -> {
+                    try {
+                        while (true) {
+                            Thread.sleep(300000);
+                            if (!running.get() || !authenticated.get()) break;
+                            try { self.sendWsText("42[\"instruments/get\"]"); } catch (Exception ignored) {}
+                            try { self.sendWsText("42[\"instruments/list\",{\"_placeholder\":true,\"num\":0}]"); } catch (Exception ignored) {}
+                        }
+                    } catch (InterruptedException ignored) {}
+                }, "instruments-refresh").start();
                 // re-follow assets (v2.0.5: full 3-step sequence)
                 for (String a : followedAssets) {
                     sendFollowSequence(a);
@@ -583,6 +613,8 @@ public class QuotexWsClient {
                         if (data instanceof JSONArray) list = (JSONArray) data;
                         else if (data instanceof JSONObject && ((JSONObject) data).has("list"))
                             list = ((JSONObject) data).getJSONArray("list");
+                        else if (data instanceof JSONObject && ((JSONObject) data).has("instruments"))
+                            list = ((JSONObject) data).getJSONArray("instruments"); // v2.0.58
                         if (list != null) storeInstruments(list);
                     } catch (Exception ignored) {}
                     break;
@@ -668,6 +700,8 @@ public class QuotexWsClient {
                 if (payload instanceof JSONArray) list = (JSONArray) payload;
                 else if (payload instanceof JSONObject && ((JSONObject) payload).has("list"))
                     list = ((JSONObject) payload).getJSONArray("list");
+                else if (payload instanceof JSONObject && ((JSONObject) payload).has("instruments"))
+                    list = ((JSONObject) payload).getJSONArray("instruments"); // v2.0.58
                 if (list != null) {
                     storeInstruments(list);
                 } else {
@@ -796,42 +830,151 @@ public class QuotexWsClient {
                 if (o.has("list")) {
                     storeInstruments(o.getJSONArray("list"));
                     scheduleInstrumentsDone();
+                } else if (o.has("instruments")) {
+                    // v2.0.58: website-format response shape {"instruments":[...]}
+                    storeInstruments(o.getJSONArray("instruments"));
+                    scheduleInstrumentsDone();
                 }
             }
         } catch (Exception ignored) {}
     }
 
-    /** v2.0.38: Clear instrumentsPending after 5s (allows multi-chunk responses). */
+    /** v2.0.38: Clear instrumentsPending after 5s (allows multi-chunk responses).
+     * v2.0.58: sliding window — each chunk extends collection by 5s (up to 60s
+     * total) so slow multi-chunk instruments responses are fully collected. */
     private volatile boolean instrumentsDoneScheduled = false;
+    private volatile long instrumentsWindowEnd = 0;
+    private volatile long instrumentsCollectDeadline = 0;
     private void scheduleInstrumentsDone() {
-        if (instrumentsDoneScheduled) return;
-        instrumentsDoneScheduled = true;
+        long now = System.currentTimeMillis();
+        if (instrumentsCollectDeadline == 0) {
+            instrumentsCollectDeadline = now + 60000; // hard cap per request cycle
+        }
+        final long windowEnd = Math.min(now + 5000, instrumentsCollectDeadline);
+        synchronized (this) {
+            if (instrumentsDoneScheduled) {
+                if (windowEnd > instrumentsWindowEnd) instrumentsWindowEnd = windowEnd;
+                return;
+            }
+            instrumentsDoneScheduled = true;
+            instrumentsWindowEnd = windowEnd;
+        }
         new Thread(() -> {
-            try { Thread.sleep(5000); } catch (Exception ignored) {}
+            try {
+                while (System.currentTimeMillis() < instrumentsWindowEnd) {
+                    Thread.sleep(500);
+                }
+            } catch (Exception ignored) {}
             instrumentsPending = false;
             instrumentsDoneScheduled = false;
+            instrumentsCollectDeadline = 0;
         }, "instruments-done-timer").start();
+    }
+
+    /** v2.0.61: STRICT symbol validation — rejects corrupt mis-parsed symbols like
+     *  "ATOUSD_otc", "AXJAUD", "AVAUSD_otc" (v2.0.60 let these through because they
+     *  are letters-only). Real Quotex symbols use REAL 3-letter currency/crypto codes.
+     *  Format: XXXYYY (6 letters) or XXXYYY_otc, where XXX and YYY are real codes.
+     *  Also allows known crypto/commodity/index symbols. */
+    private static final java.util.Set<String> VALID_CODES = new java.util.HashSet<>(
+        java.util.Arrays.asList(
+            // Major fiat (ISO 4217)
+            "USD","EUR","GBP","JPY","AUD","CAD","CHF","NZD","SEK","NOK","DKK",
+            "PLN","CZK","HUF","ILS","MXN","BRL","ZAR","SGD","HKD","CNY","INR",
+            "KRW","TRY","RUB","AED","SAR","QAR","KWD","EGP","NGN","KES",
+            // Crypto
+            "BTC","ETH","LTC","XRP","SOL","TON","BNB","ADA","DOGE","DOT","LINK",
+            "AVAX","MATIC","ATOM","NEAR","UNI","BCH","ETC","XLM","TRX",
+            // Commodities
+            "XAU","XAG","XPT","XPD",
+            // Indices (may have numbers, handled separately)
+            "SPX","NAS","DJI","FTSE","DAX","CAC","NIKKEI","HKG","ASX"
+        ));
+
+    private static boolean isValidSymbol(String s) {
+        if (s == null) return false;
+        s = s.trim().toUpperCase();
+        // Strip _OTC or -OTC suffix (both formats used)
+        String base = s;
+        if (base.endsWith("_OTC")) base = base.substring(0, base.length() - 4);
+        else if (base.endsWith("-OTC")) base = base.substring(0, base.length() - 4);
+        // Must be 6 letters (XXXYYY forex pair)
+        if (base.length() == 6 && base.matches("^[A-Z]{6}$")) {
+            String c1 = base.substring(0, 3);
+            String c2 = base.substring(3, 6);
+            // BOTH must be real currency/crypto codes
+            return VALID_CODES.contains(c1) && VALID_CODES.contains(c2);
+        }
+        // Allow indices with numbers (SPX500, NAS100, etc.)
+        if (base.matches("^[A-Z]{3,6}[0-9]{2,4}$")) {
+            String prefix = base.replaceAll("[0-9]", "");
+            return VALID_CODES.contains(prefix);
+        }
+        return false;
     }
 
     private void storeInstruments(JSONArray list) {
         try {
+            // v2.0.63: PURGE corrupt symbols from payoutMap (added by v2.0.60
+            // before strict validation). Prevents 91-pair ghost list.
+            synchronized (payoutMap) {
+                java.util.Iterator<String> it = payoutMap.keySet().iterator();
+                while (it.hasNext()) {
+                    if (!isValidSymbol(it.next())) it.remove();
+                }
+            }
             // v2.0.10: MERGE into payoutMap instead of overwriting (prevents 92->24 drop)
             // v2.0.30: accept instruments even without payout (default 0) — don't skip
             // v2.0.36: collect new symbols to auto-follow (server's full list, not hardcoded)
+            // v2.0.58: also accept array-format entries [id, symbol, name, ...] (the shape
+            // pyquotex documents) and record the payload shape for diagnostics.
+            // v2.0.59: server list is used EXACTLY as sent — no artificial variants.
+            if (list.length() > 0) {
+                Object f0 = list.opt(0);
+                lastInstrumentsShape = (f0 instanceof JSONObject ? "object"
+                        : f0 instanceof JSONArray ? "array" : "other")
+                        + "/n=" + list.length();
+            }
             java.util.List<String> newSymbols = new java.util.ArrayList<>();
             synchronized (payoutMap) {
                 for (int i = 0; i < list.length(); i++) {
                     try {
+                        String sym = "";
+                        int payout = 0;
                         JSONObject o = list.optJSONObject(i);
-                        if (o == null) continue;
-                        String sym = o.optString("asset", o.optString("symbol", o.optString("name", "")));
-                        int payout = o.optInt("payout", o.optInt("profit", o.optInt("payout_percent", 0)));
-                        if (!sym.isEmpty()) {
+                        if (o != null) {
+                            sym = o.optString("asset", o.optString("symbol",
+                                    o.optString("name", o.optString("code", ""))));
+                            payout = o.optInt("payout", o.optInt("profit",
+                                    o.optInt("payout_percent", 0)));
+                        } else {
+                            JSONArray a = list.optJSONArray(i);
+                            if (a == null) continue;
+                            // v2.0.60: scan for the FIRST string element that looks
+                            // like a real symbol. The documented [id, symbol, ...]
+                            // layout is not guaranteed — blindly taking index 1
+                            // produced garbage like "1.792183217567E9", "17".
+                            for (int j = 0; j < a.length(); j++) {
+                                Object e = a.opt(j);
+                                if (e instanceof String) {
+                                    String cand = ((String) e).trim();
+                                    if (isValidSymbol(cand)) { sym = cand; break; }
+                                }
+                            }
+                        }
+                        sym = sym.trim();
+                        // v2.0.60: strict validation — drop anything that is not
+                        // a plausible Quotex symbol (kills numeric/timestamp junk).
+                        if (!isValidSymbol(sym)) continue;
+                        {
                             boolean isNew = !payoutMap.containsKey(sym);
                             payoutMap.put(sym, Math.max(0, payout));
                             if (isNew && !followedAssets.contains(sym)) {
                                 newSymbols.add(sym);
                             }
+                            // v2.0.59: NO artificial "_otc" probing — only what the
+                            // server actually sends. (v2.0.58's probing inflated the
+                            // count and spammed toasts.)
                         }
                     } catch (Exception ignored) {}
                 }
@@ -849,6 +992,9 @@ public class QuotexWsClient {
                             if (!running.get() || !authenticated.get()) break;
                             if (followedAssets.contains(sym)) continue;
                             try { sendFollowSequence(sym); } catch (Exception ignored) {}
+                            // v2.0.58: remember followed symbols so reconnects
+                            // re-follow them
+                            if (!followedAssets.contains(sym)) followedAssets.add(sym);
                             Thread.sleep(150);
                         }
                     } catch (Exception ignored) {}
@@ -920,6 +1066,9 @@ public class QuotexWsClient {
             if (tick.length() < 3) return;
             if (!(tick.opt(0) instanceof String)) return;
             final String asset = tick.getString(0);
+            // v2.0.62: validate tick asset — drop corrupt names like "AVAUSD_otc"
+            // (mis-parsed). Prevents garbage from polluting tick report/candles.
+            if (!isValidSymbol(asset)) return;
             // v2.0.6: server sends timestamp in SECONDS (fractional), JS needs ms
             double tsRaw = tick.optDouble(1, 0);
             final long ts = tsRaw > 1e12 ? (long) tsRaw : (long) (tsRaw * 1000);
@@ -980,6 +1129,7 @@ public class QuotexWsClient {
     public void requestInstruments() {
         if (isAuthenticated()) {
             try { sendWsText("42[\"instruments/get\"]"); } catch (Exception ignored) {}
+            try { sendWsText("42[\"instruments/list\",{\"_placeholder\":true,\"num\":0}]"); } catch (Exception ignored) {}
         }
     }
 

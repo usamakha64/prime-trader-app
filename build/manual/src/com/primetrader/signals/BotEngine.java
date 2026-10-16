@@ -39,6 +39,13 @@ public class BotEngine {
     private volatile String mSsid = "";
     private volatile boolean mConnecting = false;
     private volatile String mLastHost = "";
+    // v2.0.60: native-Java candle store + Supabase sync (background-safe).
+    // The store is fed from the socket fanout below, so candles keep building
+    // even when every WebView is frozen in the background.
+    private final CandleStore mCandleStore = new CandleStore();
+    private final SupabaseSync mSupaSync = new SupabaseSync(mCandleStore);
+    private volatile java.util.concurrent.ScheduledExecutorService mCandleScheduler = null;
+    private volatile boolean mCandleSyncStarted = false;
     // v2.0.30: auto-reconnect state
     private volatile boolean mManualDisconnect = false;
     private volatile int mReconnectAttempts = 0;
@@ -89,6 +96,9 @@ public class BotEngine {
             }
         }
         @Override public void onPriceTick(String asset, long ts, double price) {
+            // v2.0.60: feed the native candle store FIRST (background-safe,
+            // independent of any WebView), then fan out to UI listeners.
+            try { mCandleStore.onTick(asset, ts, price); } catch (Exception ignored) {}
             for (QuotexWsClient.Listener l : mListeners) {
                 try { l.onPriceTick(asset, ts, price); } catch (Exception ignored) {}
             }
@@ -119,6 +129,8 @@ public class BotEngine {
         // v2.0.30: user-initiated connect — clear manual-disconnect flag, reset backoff
         mManualDisconnect = false;
         mReconnectAttempts = 0;
+        // v2.0.60: make sure the native candle sync is running (idempotent).
+        try { startCandleSync(); } catch (Exception ignored) {}
         if (ctx != null) mAppCtx = ctx.getApplicationContext();
         synchronized (mLock) {
             if (mClient != null && mClient.isAuthenticated() && target.equals(mSsid)) {
@@ -175,6 +187,8 @@ public class BotEngine {
         // v2.0.30: mark manual disconnect so auto-reconnect doesn't fire
         mManualDisconnect = true;
         mReconnectAttempts = 0;
+        // v2.0.60: final candle save, then stop the background sync.
+        try { stopCandleSync(); } catch (Exception ignored) {}
         new Thread(new Runnable() {
             @Override public void run() {
                 synchronized (mLock) {
@@ -276,6 +290,88 @@ public class BotEngine {
                     + ",\"connecting\":" + mConnecting
                     + ",\"client\":" + clientDiag + "}";
         }
+    }
+
+    /**
+     * v2.0.60: start native-Java candle sync (background-safe). Idempotent.
+     *  - seeds the CandleStore from Supabase (async, retries until success);
+     *  - runs a ScheduledExecutorService: 5s maintenance + 30s Supabase save.
+     * Java timers are NOT frozen in the background, unlike Chromium JS timers.
+     * Called from connect() so it runs in foreground AND service contexts.
+     */
+    public void startCandleSync() {
+        synchronized (mLock) {
+            if (mCandleSyncStarted) return;
+            mCandleSyncStarted = true;
+        }
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (int i = 0; i < 12; i++) {
+                    try {
+                        if (mSupaSync.loadIntoStore()) break;
+                    } catch (Exception ignored) {}
+                    try { Thread.sleep(10000); } catch (InterruptedException ie) { return; }
+                }
+            }
+        }, "candle-cloud-load").start();
+        java.util.concurrent.ScheduledExecutorService ex =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
+                        new java.util.concurrent.ThreadFactory() {
+                            @Override public Thread newThread(Runnable r) {
+                                Thread t = new Thread(r, "candle-sync");
+                                t.setDaemon(true);
+                                return t;
+                            }
+                        });
+        mCandleScheduler = ex;
+        ex.scheduleAtFixedRate(new Runnable() {
+            @Override public void run() {
+                try { mCandleStore.maintenance(); } catch (Exception ignored) {}
+            }
+        }, 5, 5, java.util.concurrent.TimeUnit.SECONDS);
+        ex.scheduleAtFixedRate(new Runnable() {
+            @Override public void run() {
+                try { mSupaSync.save(); } catch (Exception ignored) {}
+            }
+        }, 30, 30, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /** v2.0.60: stop candle sync — final Supabase save first, then shutdown. */
+    public void stopCandleSync() {
+        java.util.concurrent.ScheduledExecutorService ex;
+        synchronized (mLock) {
+            mCandleSyncStarted = false;
+            ex = mCandleScheduler;
+            mCandleScheduler = null;
+        }
+        if (ex != null) ex.shutdown();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try { mSupaSync.save(); } catch (Exception ignored) {}
+            }
+        }, "candle-final-save").start();
+    }
+
+    /** v2.0.60: candles JSON for the JS UI (read-only mirror of the Java store). */
+    public String getCandlesJson() {
+        try {
+            return mCandleStore.toJsonString();
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    /** v2.0.60: merge JS history-backfill candles into the Java store. */
+    public void pushHistoryCandles(final String asset, final String jsonArr) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    String norm = CandleStore.normAsset(asset);
+                    org.json.JSONArray arr = new org.json.JSONArray(jsonArr);
+                    mCandleStore.mergeHistory(norm, arr);
+                } catch (Exception ignored) {}
+            }
+        }, "candle-history-merge").start();
     }
 
     public void subscribe(final String asset) {

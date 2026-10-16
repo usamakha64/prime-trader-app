@@ -353,15 +353,27 @@ public class QuotexService extends Service {
             BotEngine.get().refreshAssets();
         }
 
-        /** Engine leader election: the service's hidden page always owns it. */
+        /** Engine leader election: visible app owns it (has candle data). */
         @JavascriptInterface
         public boolean amEngineOwner() {
-            return true;
+            return false; // v2.0.54: Service does NOT own engine (no candle data)
         }
 
         @JavascriptInterface
         public boolean isServiceRunning() {
             return true;
+        }
+
+        /** v2.0.60: native-Java candles JSON (same as the visible bridge). */
+        @JavascriptInterface
+        public String getCandlesJson() {
+            return BotEngine.get().getCandlesJson();
+        }
+
+        /** v2.0.60: merge JS history-backfill candles into the Java store. */
+        @JavascriptInterface
+        public void pushHistoryCandles(final String asset, final String jsonArr) {
+            BotEngine.get().pushHistoryCandles(asset, jsonArr);
         }
 
         /**

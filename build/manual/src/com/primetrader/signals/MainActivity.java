@@ -217,6 +217,15 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         QuotexService.sActivityVisible = true;
+        // v2.0.66: FIX black screen on return from background — resume WebView
+        // rendering and force a redraw so the surface is restored.
+        if (webView != null) {
+            try {
+                webView.onResume();
+                webView.resumeTimers();
+                webView.invalidate();
+            } catch (Exception ignored) {}
+        }
         // If the Activity was recreated (e.g. swiped away) while the background
         // service holds the connection, sync the fresh page once.
         if (mNeedsSync && webView != null && BotEngine.get().isConnected()) {
@@ -229,6 +238,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         QuotexService.sActivityVisible = false;
+        // v2.0.66: pause WebView rendering in background (native BotEngine keeps
+        // candles/ticks alive); prevents surface corruption on resume.
+        if (webView != null) {
+            try {
+                webView.onPause();
+                webView.pauseTimers();
+            } catch (Exception ignored) {}
+        }
         super.onPause();
     }
 
@@ -1007,7 +1024,7 @@ public class MainActivity extends Activity {
          */
         @JavascriptInterface
         public boolean amEngineOwner() {
-            return !QuotexService.sRunning;
+            return true; // v2.0.54: Visible app owns engine (has candle data)
         }
 
         /** REAL: last known balances as JSON. */
@@ -1048,6 +1065,20 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getDiagnostics() {
             return BotEngine.get().getDiagnosticsJson();
+        }
+
+        /** v2.0.60: native-Java candles JSON — the single source of truth.
+         *  JS mirrors this into window._qxCandles (read-only); it no longer
+         *  builds candles itself, which fixes the background progress-loss. */
+        @JavascriptInterface
+        public String getCandlesJson() {
+            return BotEngine.get().getCandlesJson();
+        }
+
+        /** v2.0.60: merge JS history-backfill candles into the Java store. */
+        @JavascriptInterface
+        public void pushHistoryCandles(final String asset, final String jsonArr) {
+            BotEngine.get().pushHistoryCandles(asset, jsonArr);
         }
     }
 

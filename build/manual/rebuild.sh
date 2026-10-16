@@ -32,10 +32,14 @@ rm -rf "$M/gen" && mkdir -p "$M/gen"
 
 echo "== 4. javac =="
 rm -rf "$M/classes" "$M/dex" && mkdir -p "$M/classes" "$M/dex"
-javac -source 1.8 -target 1.8 -nowarn \
+javac -source 1.8 -target 1.8 -nowarn -encoding UTF-8 \
   -cp "$AJAR" -d "$M/classes" \
   "$M/src/com/primetrader/signals/MainActivity.java" \
   "$M/src/com/primetrader/signals/QuotexWsClient.java" \
+  "$M/src/com/primetrader/signals/BotEngine.java" \
+  "$M/src/com/primetrader/signals/CandleStore.java" \
+  "$M/src/com/primetrader/signals/SupabaseSync.java" \
+  "$M/src/com/primetrader/signals/QuotexService.java" \
   "$M/src/com/primetrader/signals/ApkProvider.java" \
   "$M/gen/com/primetrader/signals/R.java"
 
