@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.48';
+const APP_VERSION = '2.0.49';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1701,6 +1701,28 @@ function initSettings() {
       } catch (e) { toast(msg.substring(0, 200), 'green'); }
     } catch (e) { toast('❌ Error: ' + e.message, 'red'); }
   });
+  // v2.0.49: Candle Report — warmup status per pair
+  var btnCandle = document.createElement('button');
+  btnCandle.className = 'btn btn-ghost btn-block mt1';
+  btnCandle.id = 'btnCandleReport';
+  btnCandle.textContent = '🕯️ Candle Report (warmup)';
+  btnCandle.addEventListener('click', function () {
+    try {
+      var candles = window._qxCandles || {};
+      var keys = Object.keys(candles);
+      if (keys.length === 0) { toast('⚠️ Koi candles nahi — pehle connect karo', 'yellow'); return; }
+      var ready = 0;
+      keys.forEach(k => { if (candles[k].length >= 61) ready++; });
+      var msg = '🕯️ Candle Report: ' + ready + '/' + keys.length + ' ready (61+)\n\n';
+      keys.sort((a,b) => candles[b].length - candles[a].length).slice(0,15).forEach(k => {
+        msg += k + ': ' + candles[k].length + '/61\n';
+      });
+      if (navigator.clipboard) navigator.clipboard.writeText(msg);
+      toast('📋 Candle Report copied! (' + ready + ' ready)', 'green');
+    } catch(e) { toast('❌ ' + e.message, 'red'); }
+  });
+  var tickBtn = $('btnTickReport');
+  if (tickBtn && tickBtn.parentNode) tickBtn.parentNode.insertBefore(btnCandle, tickBtn.nextSibling);
   var btnTg = $('btnTgTest');
   if (btnTg) btnTg.addEventListener('click', function () {
     toast('✈️ Telegram test bheja ja raha hai...', 'gold');
