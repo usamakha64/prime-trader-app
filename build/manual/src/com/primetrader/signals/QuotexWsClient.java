@@ -926,8 +926,29 @@ public class QuotexWsClient {
             final double price = tick.getDouble(2);
             tickCount++;
             lastTickTime = System.currentTimeMillis();
+            // v2.0.47: track per-pair tick counts for diagnostics
+            synchronized (tickCounts) {
+                tickCounts.put(asset, tickCounts.getOrDefault(asset, 0) + 1);
+            }
             safeCallback(() -> listener.onPriceTick(asset, ts, price));
         } catch (Exception ignored) {}
+    }
+
+    /** v2.0.47: per-pair tick counts (for diagnostics). */
+    private static final java.util.Map<String, Integer> tickCounts = new java.util.LinkedHashMap<>();
+
+    /** v2.0.47: JSON of per-pair tick counts, sorted by count desc. */
+    public static String getTickReport() {
+        try {
+            java.util.List<java.util.Map.Entry<String, Integer>> list =
+                new java.util.ArrayList<>(tickCounts.entrySet());
+            list.sort((a, b) -> b.getValue() - a.getValue());
+            JSONObject o = new JSONObject();
+            for (java.util.Map.Entry<String, Integer> e : list) {
+                o.put(e.getKey(), e.getValue());
+            }
+            return o.toString();
+        } catch (Exception ex) { return "{}"; }
     }
 
     /** Subscribe to real-time prices for an asset.

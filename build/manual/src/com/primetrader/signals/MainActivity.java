@@ -539,6 +539,14 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return ""; }
         }
 
+        /** v2.0.47: Get per-pair tick counts (which pairs are getting ticks). */
+        @JavascriptInterface
+        public String getTickReport() {
+            try {
+                return QuotexWsClient.getTickReport();
+            } catch (Exception e) { return "{}"; }
+        }
+
         /** v2.0.13: Save Quotex email/password (like Termux .env). Stored in app-private prefs. */
         @JavascriptInterface
         public void saveQxCreds(final String email, final String pass) {

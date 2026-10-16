@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.46';
+const APP_VERSION = '2.0.47';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1674,7 +1674,27 @@ function initSettings() {
       } else { done(false); }
     } catch (e) { done(false); }
   });
-  // v2.0.3: Telegram test with the real error shown
+  // v2.0.47: Tick Report — which pairs are getting ticks
+  var btnTick = $('btnTickReport');
+  if (btnTick) btnTick.addEventListener('click', function () {
+    var n = qxNative();
+    var txt = '{}';
+    try { txt = n && n.getTickReport ? n.getTickReport() : txt; } catch (e) { txt = 'error: ' + e.message; }
+    try {
+      var data = JSON.parse(txt);
+      var keys = Object.keys(data);
+      var total = keys.length;
+      var withTicks = keys.filter(k => data[k] > 0).length;
+      var msg = '📊 <b>Tick Report</b><br>' + withTicks + ' pairs with ticks / ' + total + ' tracked<br><br>';
+      // Top 15 by tick count
+      keys.slice(0, 15).forEach(k => { msg += k + ': ' + data[k] + '<br>'; });
+      if (keys.length > 15) msg += '... aur ' + (keys.length - 15) + ' aur';
+      // Show in dialog
+      if (window.confirm(msg.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '') + '\n\nCopy karna hai?')) {
+        if (navigator.clipboard) navigator.clipboard.writeText(txt);
+      }
+    } catch (e) { toast('❌ ' + e.message, 'red'); }
+  });
   var btnTg = $('btnTgTest');
   if (btnTg) btnTg.addEventListener('click', function () {
     toast('✈️ Telegram test bheja ja raha hai...', 'gold');
