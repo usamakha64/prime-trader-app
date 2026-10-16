@@ -309,6 +309,9 @@ public class QuotexWsClient {
                 for (String a : followedAssets) {
                     sendFollowSequence(a);
                 }
+                // v2.0.32: auto-follow comprehensive pairs list to discover ALL active pairs
+                // (server only sends depth/change for followed assets)
+                autoFollowAllPairs();
                 // v2.0.6: balance doesn't come over ws in production - try REST digest
                 fetchBalanceRest();
                 safeCallback(() -> listener.onConnected(host));
@@ -917,6 +920,32 @@ public class QuotexWsClient {
         if (isAuthenticated()) {
             try { sendWsText("42[\"instruments/get\"]"); } catch (Exception ignored) {}
         }
+    }
+
+    /** v2.0.32: Auto-follow comprehensive pairs list to discover ALL active pairs.
+     * Server sends depth/change only for followed assets, so we follow them all. */
+    private void autoFollowAllPairs() {
+        // Major forex, OTC variants, crypto, commodities — comprehensive Quotex list
+        String[] pairs = {
+            "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","EURGBP","EURJPY","GBPJPY","NZDUSD",
+            "AUDCAD","AUDJPY","CADJPY","CHFJPY","EURAUD","EURCAD","EURNZD","GBPAUD","GBPCAD","GBPNZD",
+            "NZDCAD","NZDJPY","AUDNZD","CADCHF","EURCHF","GBPCHF","AUDCHF","NZDCHF",
+            "EURUSD_otc","GBPUSD_otc","USDJPY_otc","AUDUSD_otc","USDCAD_otc","USDCHF_otc","EURGBP_otc","EURJPY_otc",
+            "GBPJPY_otc","NZDUSD_otc","AUDCAD_otc","AUDJPY_otc","EURAUD_otc","EURCAD_otc",
+            "BTCUSD","ETHUSD","LTCUSD","XRPUSD","DOGEUSD","ADAUSD","SOLUSD","BNBUSD",
+            "XAUUSD","XAGUSD","USOIL","UKOIL","SP500","NAS100","US30","GER30","JPN225","AUS200"
+        };
+        new Thread(() -> {
+            try {
+                // Stagger follows to avoid overwhelming the server
+                for (String p : pairs) {
+                    if (!running.get() || !authenticated.get()) break;
+                    if (followedAssets.contains(p)) continue;
+                    try { sendFollowSequence(p); } catch (Exception ignored) {}
+                    Thread.sleep(200);
+                }
+            } catch (Exception ignored) {}
+        }, "autofollow-pairs").start();
     }
 
     public void disconnect() {
