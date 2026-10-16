@@ -1,5 +1,5 @@
 {
-  "version": "2.0.7",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.7/PrimeTrader.apk",
-  "changelog": "v2.0.7: Balance via ws session cookie + REST digest (3 auth styles)."
+  "version": "2.0.8",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.8/PrimeTrader.apk",
+  "changelog": "v2.0.8: Full pairs list always synced to UI."
 }
