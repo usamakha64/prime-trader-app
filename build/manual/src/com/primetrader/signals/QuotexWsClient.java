@@ -786,15 +786,30 @@ public class QuotexWsClient {
             String t = msg.trim();
             if (t.startsWith("[")) {
                 storeInstruments(new JSONArray(t));
-                instrumentsPending = false; // got it - like pyquotex clearing _temp_status
+                // v2.0.38: DON'T clear instrumentsPending immediately — server may send
+                // instruments in multiple chunks. Keep collecting for 5s, then stop.
+                // (Old code cleared on first chunk → only 48 pairs, rest lost.)
+                scheduleInstrumentsDone();
             } else if (t.startsWith("{")) {
                 JSONObject o = new JSONObject(t);
                 if (o.has("list")) {
                     storeInstruments(o.getJSONArray("list"));
-                    instrumentsPending = false;
+                    scheduleInstrumentsDone();
                 }
             }
         } catch (Exception ignored) {}
+    }
+
+    /** v2.0.38: Clear instrumentsPending after 5s (allows multi-chunk responses). */
+    private volatile boolean instrumentsDoneScheduled = false;
+    private void scheduleInstrumentsDone() {
+        if (instrumentsDoneScheduled) return;
+        instrumentsDoneScheduled = true;
+        new Thread(() -> {
+            try { Thread.sleep(5000); } catch (Exception ignored) {}
+            instrumentsPending = false;
+            instrumentsDoneScheduled = false;
+        }, "instruments-done-timer").start();
     }
 
     private void storeInstruments(JSONArray list) {

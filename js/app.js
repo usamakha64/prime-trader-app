@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.37';
+const APP_VERSION = '2.0.38';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -580,7 +580,9 @@ function renderAcct() {
   $('acctChip').textContent = (S.account === 'demo' ? '📊 DEMO' : S.account === 'real' ? '💰 REAL' : '🏆 TOURNAMENT') + ' ▾';
   $('setAcctVal').textContent = (S.account === 'demo' ? 'DEMO' : S.account === 'real' ? 'REAL' : 'TOURNAMENT') + ' ▸';
   $('rowTournament').style.display = S.account === 'tournament' ? '' : 'none';
-  $('stBalance').textContent = '$0.00';
+  // v2.0.38: show the actual balance for the selected account (was hardcoded '$0.00')
+  const bal = (S.account === 'real') ? (S.qxLiveBalance || 0) : (S.qxDemoBalance || 0);
+  $('stBalance').textContent = '$' + Number(bal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function openAccountModal() {
   openModal(`
