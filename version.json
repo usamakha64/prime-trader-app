@@ -1,5 +1,5 @@
 {
-  "version": "2.0.26",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.26/PrimeTrader.apk",
-  "changelog": "v2.0.26: Records save locally + Supabase; Termux login flow."
+  "version": "2.0.27",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.27/PrimeTrader.apk",
+  "changelog": "v2.0.27: Cloudflare headers fix for login; SSID manual section removed."
 }
