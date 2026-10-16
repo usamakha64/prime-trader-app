@@ -679,7 +679,8 @@ public class QuotexWsClient {
 
     /** v2.0.6: quotes/stream tick payload: [["BTCUSD",1792112413.11,82279.14,1],...] */
     private void handleQuotesPayload(String msg) {
-        quotesPending = false; // consumed (one payload per placeholder)
+        // v2.0.45: DON'T clear quotesPending — server sends MULTIPLE tick batches
+        // per placeholder. Clearing it dropped all batches after the first!
         try {
             String t = msg.trim();
             if (!t.startsWith("[")) return;
