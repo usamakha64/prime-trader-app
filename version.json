@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.0/PrimeTrader.apk",
-  "changelog": "Phase 5 COMPLETE — Background bot service. Foreground service Quotex connection + 7-indicator signal engine ko background me zinda rakhta hai (persistent notification, Open App / Stop actions). Background signals aur WIN/LOSS results ki Android notifications, app kholne par live sync. SSID expire par alert. Battery optimization exemption prompt."
+  "version": "2.0.1",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.1/PrimeTrader.apk",
+  "changelog": "v2.0.1: Connection Diagnostics panel, stuck-connection fix (10s timeout), Telegram connect/disconnect alerts."
 }
