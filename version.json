@@ -1,5 +1,5 @@
 {
-  "version": "2.0.9",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.9/PrimeTrader.apk",
-  "changelog": "v2.0.9: Price-to-engine fix + pairs persist across reconnects."
+  "version": "2.0.10",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.10/PrimeTrader.apk",
+  "changelog": "v2.0.10: Pairs merge (no more 92->24 drop)."
 }
