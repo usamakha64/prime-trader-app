@@ -1,5 +1,5 @@
 {
-  "version": "2.0.27",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.27/PrimeTrader.apk",
-  "changelog": "v2.0.27: Cloudflare headers fix for login; SSID manual section removed."
+  "version": "2.0.28",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.28/PrimeTrader.apk",
+  "changelog": "v2.0.28: Termux-style manual SSID; balance event payload fix; broken auto-login removed."
 }
