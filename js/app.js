@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.47';
+const APP_VERSION = '2.0.48';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1677,23 +1677,29 @@ function initSettings() {
   // v2.0.47: Tick Report — which pairs are getting ticks
   var btnTick = $('btnTickReport');
   if (btnTick) btnTick.addEventListener('click', function () {
-    var n = qxNative();
-    var txt = '{}';
-    try { txt = n && n.getTickReport ? n.getTickReport() : txt; } catch (e) { txt = 'error: ' + e.message; }
     try {
+      var n = qxNative();
+      if (!n) { toast('❌ Native bridge nahi mila', 'red'); return; }
+      if (typeof n.getTickReport !== 'function') { toast('❌ getTickReport nahi mila (v2.0.47 install karo)', 'red'); return; }
+      var txt = n.getTickReport() || '{}';
       var data = JSON.parse(txt);
       var keys = Object.keys(data);
-      var total = keys.length;
+      if (keys.length === 0) { toast('⚠️ Abhi koi ticks nahi aaye — 1 min wait karo', 'yellow'); return; }
       var withTicks = keys.filter(k => data[k] > 0).length;
-      var msg = '📊 <b>Tick Report</b><br>' + withTicks + ' pairs with ticks / ' + total + ' tracked<br><br>';
-      // Top 15 by tick count
-      keys.slice(0, 15).forEach(k => { msg += k + ': ' + data[k] + '<br>'; });
-      if (keys.length > 15) msg += '... aur ' + (keys.length - 15) + ' aur';
-      // Show in dialog
-      if (window.confirm(msg.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '') + '\n\nCopy karna hai?')) {
-        if (navigator.clipboard) navigator.clipboard.writeText(txt);
-      }
-    } catch (e) { toast('❌ ' + e.message, 'red'); }
+      var msg = '📊 Tick Report: ' + withTicks + ' pairs / ' + keys.length + ' tracked\n\n';
+      keys.slice(0, 20).forEach(k => { msg += k + ': ' + data[k] + '\n'; });
+      if (keys.length > 20) msg += '... aur ' + (keys.length - 20);
+      // Copy to clipboard and show toast
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(msg).then(function() {
+            toast('📋 Tick Report copy ho gayi!', 'green');
+          }, function() { toast(msg.substring(0, 100), 'green'); });
+        } else {
+          toast(msg.substring(0, 200), 'green');
+        }
+      } catch (e) { toast(msg.substring(0, 200), 'green'); }
+    } catch (e) { toast('❌ Error: ' + e.message, 'red'); }
   });
   var btnTg = $('btnTgTest');
   if (btnTg) btnTg.addEventListener('click', function () {
