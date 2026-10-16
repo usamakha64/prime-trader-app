@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.36';
+const APP_VERSION = '2.0.37';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1382,9 +1382,40 @@ window.PTWeb = PTWeb;
 const PTTelegram = {
   _lastSent: 0,
   _minGapMs: 1500, // avoid Telegram rate limits
+  _pending: {}, // callbackId -> resolver for native async results
 
   _canSend() {
     return !!(S.tgToken && S.tgChat && S.tgSignals);
+  },
+
+  // v2.0.37: native async result handler (called from Java, never blocks)
+  _initNativeCallback() {
+    if (window._onTgNativeResult) return;
+    window._onTgNativeResult = function(cbId, result) {
+      const r = PTTelegram._pending[cbId];
+      if (r) { delete PTTelegram._pending[cbId]; r(result); }
+    };
+  },
+
+  // v2.0.37: send via native async (non-blocking). Returns Promise<boolean|string>.
+  _sendNativeAsync(text) {
+    this._initNativeCallback();
+    return new Promise((resolve) => {
+      try {
+        const n = qxNative();
+        if (n && typeof n.sendTelegramNative === 'function') {
+          const cbId = 'tg' + Date.now() + Math.floor(Math.random() * 10000);
+          // timeout: resolve with error if native doesn't call back in 25s
+          const to = setTimeout(() => {
+            if (PTTelegram._pending[cbId]) { delete PTTelegram._pending[cbId]; resolve('error: timeout'); }
+          }, 25000);
+          PTTelegram._pending[cbId] = (result) => { clearTimeout(to); resolve(result); };
+          n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), text, cbId);
+          return;
+        }
+      } catch (e) {}
+      resolve('error: no native bridge');
+    });
   },
 
   async _post(text, ignoreGate) {
@@ -1395,23 +1426,11 @@ const PTTelegram = {
       await new Promise(r => setTimeout(r, this._minGapMs - (nowMs - this._lastSent)));
     }
     this._lastSent = Date.now();
-    // v2.0.35: use native Java HTTP (JS fetch is blocked in WebView file:// origin)
+    // v2.0.37: use native async (non-blocking — v2.0.35 sync version hung the app)
     try {
-      const n = qxNative();
-      if (n && typeof n.sendTelegramNative === 'function') {
-        const res = n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), text);
-        return res === 'ok';
-      }
-    } catch (e) {}
-    // fallback: JS fetch (may fail in WebView)
-    try {
-      const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: String(S.tgChat).trim(), text: text, parse_mode: 'HTML' })
-      });
-      return r.ok;
+      const res = await this._sendNativeAsync(text);
+      if (typeof res === 'string') return res === 'ok';
+      return !!res;
     } catch (e) { return false; }
   },
 
@@ -1450,28 +1469,15 @@ const PTTelegram = {
 
   // v2.0.3: returns the REAL Telegram error so the user can fix token/chat
   // v2.0.35: uses native Java HTTP (JS fetch blocked in WebView)
+  // v2.0.37: async native (non-blocking — sync version hung the app)
   async testSend() {
     if (!(S.tgToken && S.tgChat)) return { ok: false, detail: 'Token ya Chat ID khaali hai' };
     try {
-      const n = qxNative();
-      if (n && typeof n.sendTelegramNative === 'function') {
-        const res = n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), '✅ Prime Trader test — Telegram kaam kar raha hai!');
-        if (res === 'ok') return { ok: true, detail: 'Test message bheja gaya!' };
-        return { ok: false, detail: res };
-      }
-    } catch (e) {}
-    try {
-      const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: String(S.tgChat).trim(), text: '✅ Prime Trader test — Telegram kaam kar raha hai!' })
-      });
-      const body = await r.text();
-      let desc = body;
-      try { const j = JSON.parse(body); if (j.description) desc = j.description; } catch (e) {}
-      return { ok: r.ok, detail: 'HTTP ' + r.status + ' — ' + String(desc).slice(0, 200) };
-    } catch (e) { return { ok: false, detail: 'Network error: ' + e.message }; }
+      const res = await this._sendNativeAsync('✅ Prime Trader test — Telegram kaam kar raha hai!');
+      if (res === 'ok') return { ok: true, detail: 'Test message bheja gaya! Telegram check karo.' };
+      if (typeof res === 'string' && res.startsWith('error:')) return { ok: false, detail: res };
+      return { ok: false, detail: 'Bheja nahi ja saka: ' + res };
+    } catch (e) { return { ok: false, detail: 'Error: ' + e.message }; }
   }
 };
 window.PTTelegram = PTTelegram;

@@ -329,13 +329,46 @@ public class MainActivity extends Activity {
     public class QuotexBridge {
 
         /** v2.0.35: Send Telegram message via native Java HTTP (JS fetch is blocked in WebView).
-         * Returns "ok" on success, "error: ..." on failure. Runs synchronously (call off UI thread). */
+         * v2.0.37: ASYNC — returns immediately, result delivered via JS callback.
+         * Prevents app hang (network I/O no longer blocks the JS thread). */
         @JavascriptInterface
-        public String sendTelegramNative(final String token, final String chatId, final String text) {
+        public void sendTelegramNative(final String token, final String chatId, final String text, final String callbackId) {
+            final String t = token == null ? "" : token.trim();
+            final String c = chatId == null ? "" : chatId.trim();
+            final String msg = text == null ? "" : text;
+            final String cb = callbackId == null ? "" : callbackId;
+            // Run network I/O off the JS thread to avoid hanging the WebView
+            new Thread(() -> {
+                String result;
+                if (t.isEmpty() || c.isEmpty() || msg.isEmpty()) {
+                    result = "error: empty token/chat/text";
+                } else {
+                    result = doTelegramPost(t, c, msg);
+                }
+                // Deliver result back to JS
+                if (!cb.isEmpty()) {
+                    final String js = "if(window._onTgNativeResult)window._onTgNativeResult("
+                        + org.json.JSONObject.quote(cb) + "," + org.json.JSONObject.quote(result) + ");";
+                    runOnUiThread(() -> {
+                        try {
+                            if (MainActivity.this.webView != null) MainActivity.this.webView.evaluateJavascript(js, null);
+                        } catch (Exception ignored) {}
+                    });
+                }
+            }, "tg-native-send").start();
+        }
+
+        /** Synchronous version (kept for compatibility) — prefer the async one above. */
+        @JavascriptInterface
+        public String sendTelegramSync(final String token, final String chatId, final String text) {
             final String t = token == null ? "" : token.trim();
             final String c = chatId == null ? "" : chatId.trim();
             final String msg = text == null ? "" : text;
             if (t.isEmpty() || c.isEmpty() || msg.isEmpty()) return "error: empty token/chat/text";
+            return doTelegramPost(t, c, msg);
+        }
+
+        private String doTelegramPost(String t, String c, String msg) {
             java.net.HttpURLConnection conn = null;
             try {
                 java.net.URL url = new java.net.URL("https://api.telegram.org/bot" + t + "/sendMessage");
@@ -356,7 +389,6 @@ public class MainActivity extends Activity {
                 os.close();
                 int code = conn.getResponseCode();
                 if (code == 200) return "ok";
-                // read error body for diagnostics
                 String err = "";
                 try {
                     java.io.InputStream es = conn.getErrorStream();
