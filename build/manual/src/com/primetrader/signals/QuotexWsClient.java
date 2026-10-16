@@ -461,9 +461,15 @@ public class QuotexWsClient {
                     String body = "";
                     try {
                         java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
-                        byte[] buf = new byte[2000];
-                        int n = is.read(buf);
-                        if (n > 0) body = new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8);
+                        // v2.0.31: read FULL body (was 2000 bytes -> JSON truncated -> parse fail)
+                        StringBuilder sb = new StringBuilder();
+                        byte[] buf = new byte[8000];
+                        int n;
+                        while ((n = is.read(buf)) > 0) {
+                            sb.append(new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8));
+                            if (sb.length() > 100000) break; // safety cap
+                        }
+                        body = sb.toString();
                     } catch (Exception ignored) {}
                     log.append("HTTP ").append(code).append("; ");
                     balanceRest = log.toString() + (body.length() > 200 ? body.substring(0, 200) : body);
@@ -472,8 +478,9 @@ public class QuotexWsClient {
                             JSONObject root = new JSONObject(body);
                             JSONObject d = root.optJSONObject("data");
                             if (d == null) d = root;
-                            demoBalance = d.optDouble("demoBalance", demoBalance);
-                            liveBalance = d.optDouble("liveBalance", liveBalance);
+                            // v2.0.31: use parseBalanceValue (handles "11094" strings, not just numbers)
+                            demoBalance = parseBalanceValue(d, "demoBalance", demoBalance);
+                            liveBalance = parseBalanceValue(d, "liveBalance", liveBalance);
                             String cur = d.optString("currencyCode", d.optString("currency", ""));
                             if (!cur.isEmpty()) currency = cur;
                             final double db = demoBalance, lb = liveBalance;
