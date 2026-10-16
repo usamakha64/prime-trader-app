@@ -1,5 +1,5 @@
 {
-  "version": "2.0.1",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.1/PrimeTrader.apk",
-  "changelog": "v2.0.1: Connection Diagnostics panel, stuck-connection fix (10s timeout), Telegram connect/disconnect alerts."
+  "version": "2.0.2",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.2/PrimeTrader.apk",
+  "changelog": "v2.0.2: Pairs list fix (451- binary format), balance fix (full post-auth handshake), Send Report to Telegram button."
 }
