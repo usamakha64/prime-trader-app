@@ -1,5 +1,5 @@
 {
-  "version": "2.0.2",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.2/PrimeTrader.apk",
-  "changelog": "v2.0.2: Pairs list fix (451- binary format), balance fix (full post-auth handshake), Send Report to Telegram button."
+  "version": "2.0.3",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.3/PrimeTrader.apk",
+  "changelog": "v2.0.3: Copy Raw Report button, Telegram test with real error, token trim."
 }
