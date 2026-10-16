@@ -1,5 +1,5 @@
 {
-  "version": "2.0.5",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.5/PrimeTrader.apk",
-  "changelog": "v2.0.5: Live price ticks via full 3-step subscribe sequence."
+  "version": "2.0.6",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.6/PrimeTrader.apk",
+  "changelog": "v2.0.6: Live ticks via quotes/stream, balance via account/change + REST digest."
 }
