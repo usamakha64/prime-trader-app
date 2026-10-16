@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.50';
+const APP_VERSION = '2.0.51';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1724,15 +1724,24 @@ function initSettings() {
       var data = JSON.parse(txt);
       var keys = Object.keys(data);
       if (keys.length === 0) { toast('⚠️ Abhi koi ticks nahi aaye — 1 min wait karo', 'yellow'); return; }
+      // v2.0.51: Show zero-tick pairs too (compare with full instruments list)
+      var allInst = (S.qxInstruments || []).map(function(i) { return qxNormAsset(i.name || i); });
+      var tickNorm = {};
+      keys.forEach(function(k) { tickNorm[qxNormAsset(k)] = k; });
+      var zeroTick = allInst.filter(function(norm) { return !tickNorm[norm]; });
       var withTicks = keys.filter(k => data[k] > 0).length;
-      var msg = '📊 Tick Report: ' + withTicks + ' pairs / ' + keys.length + ' tracked\n\n';
-      keys.slice(0, 20).forEach(k => { msg += k + ': ' + data[k] + '\n'; });
-      if (keys.length > 20) msg += '... aur ' + (keys.length - 20);
+      var msg = '📊 Tick Report: ' + withTicks + ' with ticks, ' + zeroTick.length + ' with ZERO ticks\n\n';
+      msg += '✅ WITH TICKS (' + withTicks + '):\n';
+      keys.slice(0, 15).forEach(k => { msg += k + ': ' + data[k] + '\n'; });
+      if (keys.length > 15) msg += '... aur ' + (keys.length - 15) + '\n';
+      msg += '\n❌ ZERO TICKS (' + zeroTick.length + '):\n';
+      zeroTick.slice(0, 20).forEach(function(norm) { msg += norm + ': 0\n'; });
+      if (zeroTick.length > 20) msg += '... aur ' + (zeroTick.length - 20);
       // Copy to clipboard and show toast
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(msg).then(function() {
-            toast('📋 Tick Report copy ho gayi!', 'green');
+            toast('📋 Tick Report copy ho gayi! (' + withTicks + '✓ ' + zeroTick.length + '✗)', 'green');
           }, function() { toast(msg.substring(0, 100), 'green'); });
         } else {
           toast(msg.substring(0, 200), 'green');
