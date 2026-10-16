@@ -224,9 +224,38 @@
             <button type="button" class="btn btn-ghost btn-sm" id="btnCopySsidCmd" style="margin-top:.25rem">📋 Copy Command</button>
           </div>
         </div>
-        <button class="btn btn-gold btn-block" id="btnSaveSsid">💾 Save &amp; Connect</button>
+        <!-- v2.0.13: Quotex email/password (like Termux bot .env) for balance -->
+        <div class="field">
+          <label>Quotex Email (Balance ke liye)</label>
+          <input type="email" id="inQxEmail" placeholder="tumhara@email.com" autocomplete="email">
+          <div class="hint">Purane bot jaisa — ek dafa dalo, balance khud aayega.</div>
+        </div>
+        <div class="field">
+          <label>Quotex Password</label>
+          <div class="pwd-wrap">
+            <input type="password" id="inQxPass" placeholder="••••••••" autocomplete="current-password">
+          </div>
+          <div class="hint">Sirf tumhare phone me save hoga, kahin nahi bheja jayega.</div>
+        </div>
+        <button class="btn btn-gold btn-block" id="btnQxLogin">🔐 Login &amp; Connect</button>
+        <div class="hint" style="margin:.5rem 0">Email/password se auto-login — SSID paste karne ki zaroorat nahi.</div>
+        <button class="btn btn-ghost btn-block" id="btnSaveSsid">💾 Save &amp; Connect (manual SSID)</button>
         <button class="btn btn-ghost btn-sm btn-block mt1" id="btnCopySsid" style="display:none">📋 Copy SSID</button>
         <button class="btn btn-ghost btn-sm btn-block mt1" id="btnDisconnectSsid" style="display:none">🔌 Disconnect</button>
+        <!-- v2.0.25: Removed manual Quotex login button (Termux auto-login now) -->
+      </div>
+    </div>
+
+    <!-- CONNECTION DIAGNOSTICS (v2.0.1) -->
+    <div class="set-section">
+      <div class="set-section-title">🩺 Connection Diagnostics</div>
+      <div class="card" style="margin-bottom:0">
+        <div class="tiny text-muted" style="margin-bottom:.5rem">Is se pata chalega Quotex connection me kahan masla hai.</div>
+        <div id="diagBox" class="tiny" style="white-space:pre-wrap;line-height:1.7">Abhi check nahi hua — neeche button dabao.</div>
+        <button class="btn btn-gold btn-block mt1" id="btnDiagRefresh">🔄 Refresh Diagnostics</button>
+        <button class="btn btn-ghost btn-block mt1" id="btnDiagReport">📤 Send Report to Telegram</button>
+        <button class="btn btn-ghost btn-block mt1" id="btnDiagCopy">📋 Copy Raw Report</button>
+        <button class="btn btn-ghost btn-block mt1" id="btnTgTest">✈️ Test Telegram</button>
       </div>
     </div>
 
@@ -298,7 +327,10 @@
       <div class="set-section-title">💹 Trade AI Bot</div>
       <div class="set-row"><div class="set-label">Auto Trade</div><label class="toggle"><input type="checkbox" id="tAutoTrade" checked><span class="track"></span></label></div>
       <div class="set-row"><div><div class="set-label">Base Amount</div><div class="set-desc">USD per trade</div></div><span class="set-val" id="vAmount">$10</span></div>
-      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAmount" min="1" max="3000" value="10"></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none">
+        <input type="range" id="inAmount" min="1" max="3000" value="10">
+        <div class="field" style="margin-top:.5rem"><input type="number" id="inAmountManual" min="1" max="3000" placeholder="Or type exact amount (1-3000)"></div>
+      </div>
       <div class="set-row" style="border-radius:0"><div><div class="set-label">Auto-Trade Confidence</div><div class="set-desc">Bot only auto-trades signals at/above this — lower ones show as signals only, no trade</div></div><span class="set-val" id="vAutoTradeConf">85%</span></div>
       <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAutoTradeConf" min="50" max="95" value="85"></div>
       <div class="set-row"><div><div class="set-label">MTG Multiplier</div><div class="set-desc">Stake multiplier after a loss</div></div><span class="set-val" id="vMtgMult">2.0×</span></div>
@@ -345,7 +377,8 @@
       <div class="card">
         <div class="field"><label>Bot Token</label><input type="password" id="inTgToken" placeholder="123456:ABC-DEF..."></div>
         <div class="field"><label>Chat / Channel ID</label><input type="text" id="inTgChat" placeholder="ID"></div>
-        <div class="set-row" style="border-radius:14px"><div class="set-label">Signal Alerts</div><label class="toggle"><input type="checkbox" id="tTgSignals" checked><span class="track"></span></label></div>
+        <div class="set-row" style="border-radius:14px 14px 0 0"><div class="set-label">Signal Alerts</div><label class="toggle"><input type="checkbox" id="tTgSignals" checked><span class="track"></span></label></div>
+        <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Connect/Disconnect Alerts</div><div class="set-desc">Telegram message on Quotex connect &amp; disconnect</div></div><label class="toggle"><input type="checkbox" id="tTgStatus" checked><span class="track"></span></label></div>
       </div>
     </div>
 

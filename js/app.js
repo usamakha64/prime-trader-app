@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '2.0.29';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -33,7 +33,7 @@ const DEFAULTS = {
   lossLimit: 100, profitTarget: 200, autoStop: true,
   startTime: '09:00', endTime: '23:00', newsPause: true,
   assets: ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCAD','EURGBP','EURJPY','GBPJPY','USDCHF','NZDUSD'],
-  tgToken: '', tgChat: '', tgSignals: true,
+  tgToken: '', tgChat: '', tgSignals: true, tgStatus: true,
   pinLock: false, pin: '', fingerprint: false,
   pushSignals: true, pushResults: true, pushSsid: true,
   stopped: false, onboarded: false,
@@ -159,6 +159,21 @@ const batches = [];
 
 /* Signal history (past signals + results) - starts empty */
 const sigHistory = [];
+// v2.0.26: Persist signal history locally (user requirement: records in app too)
+try {
+  const saved = localStorage.getItem('pt_sig_history');
+  if (saved) {
+    const arr = JSON.parse(saved);
+    if (Array.isArray(arr)) {
+      for (const s of arr.slice(0, 200)) sigHistory.push(s);
+    }
+  }
+} catch (e) {}
+function persistSigHistory() {
+  try {
+    localStorage.setItem('pt_sig_history', JSON.stringify(sigHistory.slice(0, 200)));
+  } catch (e) {}
+}
 
 /* Strategies */
 const strategies = [
@@ -631,6 +646,14 @@ function renderSsid() {
   // mask indicator: show placeholder when an SSID is stored
   if (has && !$('inSsid').value) $('inSsid').placeholder = '•••••••• SSID saved — paste new to replace';
   else if (!has) $('inSsid').placeholder = 'Paste new SSID here';
+  // v2.0.16: restore saved email
+  try {
+    const qe = $('inQxEmail');
+    if (qe && !qe.value) {
+      const se = localStorage.getItem('qx_email');
+      if (se) qe.value = se;
+    }
+  } catch (e) {}
   renderConnPill();
 }
 // Connection pill: SSID + native status drive the header pill
@@ -644,34 +667,75 @@ function renderConnPill() {
   else if (has) { pill.classList.add('off'); pill.innerHTML = '<span class="dot"></span>CONNECTING…'; }
   else { pill.classList.add('off'); pill.innerHTML = '<span class="dot"></span>DISCONNECTED'; }
 }
-// Save & Connect
+// v2.0.29: Login & Connect — WebView auto-login (no manual SSID needed).
+// Email/password se Quotex me login → SSID + cookies auto-extract → connect.
+const btnQxLogin = $('btnQxLogin');
+if (btnQxLogin) btnQxLogin.addEventListener('click', () => {
+  const qe = $('inQxEmail'), qp = $('inQxPass');
+  const email = qe ? qe.value.trim() : '', pass = qp ? qp.value : '';
+  if (!email || !pass) { toast('⚠️ Pehle email aur password dalo', 'red'); return; }
+  try { localStorage.setItem('qx_email', email); } catch (e) {}
+  const n = qxNative();
+  if (n && typeof n.qxEmailLogin === 'function') {
+    try {
+      n.saveQxCreds(email, pass);
+      n.qxEmailLogin(email, pass);
+      toast('🔐 <b>Logging in…</b> (browser khul raha hai)', 'gold');
+    } catch (e) { toast('⚠️ Login failed: ' + e.message, 'red'); }
+  } else {
+    toast('📱 <b>Saved.</b> Real login works inside the Android app.', 'green');
+  }
+});
+// Save & Connect — v2.0.28: Termux jaisa manual SSID flow (fallback)
 $('btnSaveSsid').addEventListener('click', () => {
   const v = $('inSsid').value.trim();
-  if (!v) { toast('⚠️ Paste an SSID first', 'red'); return; }
+  if (!v) { toast('⚠️ SSID dalo — Chrome console se copy karke paste karo', 'red'); return; }
   if (v.length < 8) { toast('⚠️ SSID looks too short', 'red'); return; }
   S = store.set({ ssid: v, ssidSavedAt: new Date().toLocaleString() });
   $('inSsid').value = '';
   $('inSsid').type = 'password'; $('btnSsidToggle').textContent = '👁️';
-  toast('🔑 <b>SSID saved.</b> Connecting…', 'gold');
+  // v2.0.13: save Quotex email/password locally (Termux .env jaisa — sirf phone me)
+  const qe = $('inQxEmail'), qp = $('inQxPass');
+  const email = qe ? qe.value.trim() : '', pass = qp ? qp.value : '';
+  if (email) { try { localStorage.setItem('qx_email', email); } catch (e) {} }
+  const n2 = qxNative();
+  if (email && pass && n2 && typeof n2.saveQxCreds === 'function') {
+    try { n2.saveQxCreds(email, pass); } catch (e) {}
+  }
+  toast('🔑 <b>Connecting…</b>', 'gold');
   renderSsid();
   const n = qxNative();
   if (n) {
     try { n.connect(v); } catch (e) { toast('⚠️ Native connect failed: ' + e.message, 'red'); }
-    // re-check status shortly after native attempts connection
     setTimeout(renderSsid, 2500);
   } else {
-    // No native bridge (e.g. preview in desktop browser) — mark saved, real connect needs the app
-    toast('📱 <b>SSID saved.</b> Real connection works inside the Android app.', 'green');
+    toast('📱 <b>Saved.</b> Real connection works inside the Android app.', 'green');
   }
 });
-// Disconnect
+// Disconnect — v2.0.24: also clears email/password (full account removal)
 $('btnDisconnectSsid').addEventListener('click', () => {
   const n = qxNative();
   if (n) { try { n.disconnect(); } catch (e) {} }
   S = store.set({ ssid: '' , ssidSavedAt: '' });
+  // Clear saved email/password too
+  try {
+    localStorage.removeItem('qx_email');
+    const qe = $('inQxEmail'), qp = $('inQxPass');
+    if (qe) qe.value = '';
+    if (qp) qp.value = '';
+    if (n && typeof n.clearQxCreds === 'function') {
+      try { n.clearQxCreds(); } catch (e) {}
+    }
+  } catch (e) {}
   renderSsid();
-  toast('🔌 <b>Disconnected.</b> SSID removed.', 'red');
+  toast('🔌 <b>Account removed.</b> Naya account add kar sakte ho.', 'red');
 });
+// v2.0.11: Quotex web login for balance (user logs in on quotex.com directly)
+// v2.0.25: Removed manual Quotex login button handler (Termux auto-login now)
+// Called by native after successful web login
+window.onQuotexLogin = function (ok) {
+  if (ok) toast('✅ <b>Quotex login!</b> Balance aa raha hai…', 'green');
+};
 // Copy SSID
 $('btnCopySsid').addEventListener('click', () => {
   if (S.ssid) {
@@ -690,17 +754,46 @@ $('btnCopySsidCmd').addEventListener('click', () => {
     toast('❌ Copy failed', 'red');
   });
 });
+// v2.0.1: Connection Diagnostics — Settings panel me asal haalat dikhata hai
+function renderDiagnostics() {
+  var box = $('diagBox');
+  if (!box) return;
+  var n = qxNative();
+  if (!n || !n.getDiagnostics) {
+    box.textContent = '⚠️ App ka native hissa (bridge) nahi mila.\nYe purana version ho sakta hai — v2.0.1 install karo.';
+    return;
+  }
+  var d;
+  try { d = JSON.parse(n.getDiagnostics()); }
+  catch (e) { box.textContent = '❌ Diagnostics parhne me masla: ' + e.message; return; }
+  var c = d.client || {};
+  function age(s) { return (s == null || s < 0) ? '—' : (s < 90 ? s + 's pehle' : Math.round(s / 60) + 'm pehle'); }
+  var lines = [];
+  lines.push('🔌 Authenticated: ' + (d.connected ? 'YES ✅' : 'NO ❌'));
+  lines.push('⏳ Connecting (atkha hua): ' + (d.connecting ? 'YES ⚠️' : 'no'));
+  lines.push('🌐 Host: ' + (c.host || '—'));
+  lines.push('💰 Balance — Demo: $' + Number(c.demoBalance || 0).toFixed(2) + ' | Live: $' + Number(c.liveBalance || 0).toFixed(2));
+  lines.push('📊 Pairs mile: ' + (c.instrumentsCount || 0));
+  lines.push('📈 Ticks aaye: ' + (c.tickCount || 0) + ' (akhri: ' + age(c.lastTickAgeSec) + ')');
+  lines.push('🔑 Akhri kamyab login: ' + age(c.lastAuthAgeSec));
+  if (c.lastError) lines.push('❌ Akhri error: ' + c.lastError);
+  if (!d.connected && !d.connecting) lines.push('\n💡 Hal: naya SSID nikalo aur Save & Connect dabao.');
+  box.textContent = lines.join('\n');
+}
 // SSID expiry hook (wired to native QuotexWsClient onAuthFailed)
+// v2.0.28: SSID expired → user pastes a new one manually (Termux flow; no auto-login)
 function onSsidExpired() {
   $('ssidStatus').className = 'pill pill-red'; $('ssidStatus').textContent = '● Expired';
   renderConnPill();
-  if (S.pushSsid) toast('🔔 <b>SSID expired!</b> Paste a new SSID in Settings → Quotex SSID.', 'red');
+  toast('🔔 <b>SSID expired!</b> Chrome console se naya SSID copy karke paste karo.', 'red');
 }
 
 /* ---------- REAL Quotex callbacks (native -> JS, Phase 2) ---------- */
 // Called by native when the WebSocket authenticates successfully.
 window.onQxConnected = function (host) {
   toast('✅ <b>Quotex connected</b> via ' + host, 'green');
+  // v2.0.1: Telegram connect notification (user asked)
+  try { if (S.tgStatus) PTTelegram.sendStatus('✅ <b>Quotex CONNECTED</b>\nHost: ' + host + '\nTime: ' + PTTelegram.fmtTime(new Date())); } catch (e) {}
   renderSsid();
   renderConnPill();
   // ask native for the latest balance + assets
@@ -711,10 +804,15 @@ window.onQxConnected = function (host) {
       onQxBalance(b.demo || 0, b.live || 0, b.currency || 'USD');
     } catch (e) {}
     try { n.refreshAssets(); } catch (e) {}
+    // Phase 3: subscribe the socket to the user's selected assets for the signal engine
+    qxSubscribeAssets();
+    startSignalEngine();
   }
 };
 // Called by native when the socket drops.
 window.onQxDisconnected = function (reason) {
+  // v2.0.1: Telegram disconnect notification (user asked)
+  try { if (S.tgStatus) PTTelegram.sendStatus('⚠️ <b>Quotex DISCONNECTED</b>\n' + (reason || '')); } catch (e) {}
   renderSsid();
   renderConnPill();
 };
@@ -733,8 +831,11 @@ window.onQxBalance = function (demo, live, currency) {
 window.onQxInstruments = function (jsonStr) {
   try {
     const arr = JSON.parse(jsonStr);
+    // v2.0.4: pairs refresh often (live payouts) — toast only on first load / count change
+    const first = !S.qxInstruments || S.qxInstruments.length === 0;
+    const countChanged = S.qxInstruments && S.qxInstruments.length !== arr.length;
     S = store.set({ qxInstruments: arr });
-    toast('📊 <b>' + arr.length + ' pairs</b> loaded from Quotex', 'green');
+    if (first || countChanged) toast('📊 <b>' + arr.length + ' pairs</b> loaded from Quotex', 'green');
     renderAssetChips();
   } catch (e) {}
 };
@@ -742,9 +843,685 @@ window.onQxInstruments = function (jsonStr) {
 window.onPriceTick = function (asset, ts, price) {
   try {
     if (!window._qxPrices) window._qxPrices = {};
-    window._qxPrices[asset] = { ts: ts, price: price };
+    var norm = qxNormAsset(asset);
+    window._qxPrices[norm] = { ts: ts, price: price };
+    // --- build 1-minute candles for the Phase 3 signal engine ---
+    if (!window._qxCandles) window._qxCandles = {};
+    var bucket = Math.floor(ts / 60000) * 60000;
+    var arr = window._qxCandles[norm];
+    if (!arr) arr = window._qxCandles[norm] = [];
+    var last = arr[arr.length - 1];
+    if (last && last.t === bucket) {
+      if (price > last.h) last.h = price;
+      if (price < last.l) last.l = price;
+      last.c = price;
+    } else {
+      arr.push({ t: bucket, o: price, h: price, l: price, c: price });
+      if (arr.length > 150) arr.splice(0, arr.length - 150); // keep ~2.5h of 1m candles
+    }
   } catch (e) {}
 };
+
+/* ============================================================
+   PHASE 3 — REAL 7-INDICATOR SIGNAL ENGINE
+   Strategy (user-confirmed FINAL):
+     EMA 9 / EMA 21 / EMA 50, RSI 14, ADX 14, ATR 14, Bollinger 20,2
+   CALL: EMA9 > EMA21 > EMA50, RSI 50-65, ADX > 20, bullish close, vol OK
+   PUT:  EMA9 < EMA21 < EMA50, RSI 35-50, ADX > 20, bearish close, vol OK
+   else: NO TRADE
+   ============================================================ */
+
+/* Normalize Quotex wire names to app asset names: 'EURUSD_otc' -> 'EURUSD-OTC' */
+function qxNormAsset(a) {
+  if (!a) return a;
+  var s = String(a).toUpperCase();
+  if (/_OTC$/.test(s)) s = s.replace(/_OTC$/, '-OTC');
+  return s;
+}
+/* App asset name -> Quotex wire name: 'EURUSD-OTC' -> 'EURUSD_otc' */
+function qxWireAsset(a) {
+  if (!a) return a;
+  return String(a).replace(/-OTC$/i, '_otc');
+}
+/* Payout % for an asset from the live instruments list (0 = unknown) */
+function qxPayout(asset) {
+  var inst = (S.qxInstruments || []);
+  var want = String(asset).toUpperCase().replace(/[^A-Z]/g, '');
+  for (var i = 0; i < inst.length; i++) {
+    var o = inst[i] || {};
+    var name = String(o.name || o.asset || o.symbol || '').toUpperCase().replace(/[^A-Z]/g, '');
+    if (name && name === want) {
+      var p = (o.payout !== undefined) ? o.payout : ((o.profit !== undefined) ? o.profit : 0);
+      return +p || 0;
+    }
+  }
+  return 0;
+}
+
+/* ---------- Indicator math (pure functions) ---------- */
+function qxLastVal(arr) {
+  for (var i = arr.length - 1; i >= 0; i--) {
+    if (arr[i] !== null && arr[i] !== undefined && !isNaN(arr[i])) return arr[i];
+  }
+  return null;
+}
+function qxEma(values, period) {
+  var out = new Array(values.length).fill(null);
+  if (values.length < period) return out;
+  var k = 2 / (period + 1), sum = 0, i;
+  for (i = 0; i < period; i++) sum += values[i];
+  var prev = sum / period;
+  out[period - 1] = prev;
+  for (i = period; i < values.length; i++) { prev = values[i] * k + prev * (1 - k); out[i] = prev; }
+  return out;
+}
+function qxRsi(closes, period) {
+  period = period || 14;
+  if (closes.length < period + 1) return null;
+  var i, d, gains = 0, losses = 0;
+  for (i = 1; i <= period; i++) {
+    d = closes[i] - closes[i - 1];
+    if (d >= 0) gains += d; else losses -= d;
+  }
+  var avgG = gains / period, avgL = losses / period;
+  for (i = period + 1; i < closes.length; i++) {
+    d = closes[i] - closes[i - 1];
+    avgG = (avgG * (period - 1) + (d > 0 ? d : 0)) / period;
+    avgL = (avgL * (period - 1) + (d < 0 ? -d : 0)) / period;
+  }
+  if (avgL === 0) return 100;
+  return 100 - (100 / (1 + avgG / avgL));
+}
+/* Wilder ATR + ADX in one pass */
+function qxAtrAdx(highs, lows, closes, period) {
+  period = period || 14;
+  var n = closes.length;
+  if (n < period * 2 + 1) return { atr: null, adx: null };
+  var trs = [], pDM = [], mDM = [], i;
+  for (i = 1; i < n; i++) {
+    var h = highs[i], l = lows[i], pc = closes[i - 1];
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+    var up = highs[i] - highs[i - 1], dn = lows[i - 1] - lows[i];
+    pDM.push((up > dn && up > 0) ? up : 0);
+    mDM.push((dn > up && dn > 0) ? dn : 0);
+  }
+  function wilder(arr) {
+    var out = new Array(arr.length).fill(null), i, s = 0;
+    if (arr.length < period) return out;
+    for (i = 0; i < period; i++) s += arr[i];
+    out[period - 1] = s;
+    for (i = period; i < arr.length; i++) out[i] = out[i - 1] - out[i - 1] / period + arr[i];
+    return out;
+  }
+  var sTR = wilder(trs), sP = wilder(pDM), sM = wilder(mDM), dx = [];
+  for (i = 0; i < sTR.length; i++) {
+    if (sTR[i] === null || sTR[i] === 0) { dx.push(null); continue; }
+    var pdi = 100 * sP[i] / sTR[i], mdi = 100 * sM[i] / sTR[i], tot = pdi + mdi;
+    dx.push(tot === 0 ? 0 : 100 * Math.abs(pdi - mdi) / tot);
+  }
+  var dxv = dx.filter(function (v) { return v !== null; }), adx = null;
+  if (dxv.length >= period) {
+    var a = 0;
+    for (i = 0; i < period; i++) a += dxv[i];
+    a /= period;
+    for (i = period; i < dxv.length; i++) a = (a * (period - 1) + dxv[i]) / period;
+    adx = a;
+  }
+  var lastTR = qxLastVal(sTR);
+  return { atr: lastTR === null ? null : lastTR / period, adx: adx };
+}
+function qxBollinger(closes, period, mult) {
+  period = period || 20; mult = mult || 2;
+  if (closes.length < period) return null;
+  var slice = closes.slice(closes.length - period), sum = 0, i;
+  for (i = 0; i < slice.length; i++) sum += slice[i];
+  var mid = sum / period, sq = 0;
+  for (i = 0; i < slice.length; i++) sq += Math.pow(slice[i] - mid, 2);
+  var sd = Math.sqrt(sq / period);
+  return { upper: mid + mult * sd, middle: mid, lower: mid - mult * sd };
+}
+
+/* ---------- Analyze one asset: returns {signal:'CALL'|'PUT'|'NONE', conf, details, reason} ---------- */
+function analyzeAsset(asset) {
+  var candles = (window._qxCandles && window._qxCandles[qxNormAsset(asset)]) || [];
+  if (candles.length < 61) return { signal: 'NONE', conf: 0, reason: 'warming up (' + candles.length + '/61 candles)' };
+  var closed = candles.slice(0, candles.length - 1); // last candle may still be forming
+  var n = closed.length;
+  var closes = [], highs = [], lows = [], i;
+  for (i = 0; i < n; i++) { closes.push(closed[i].c); highs.push(closed[i].h); lows.push(closed[i].l); }
+
+  var ema9 = qxLastVal(qxEma(closes, 9));
+  var ema21 = qxLastVal(qxEma(closes, 21));
+  var ema50 = qxLastVal(qxEma(closes, 50));
+  var rsi = qxRsi(closes, 14);
+  var aa = qxAtrAdx(highs, lows, closes, 14);
+  var bb = qxBollinger(closes, 20, 2);
+  if (ema9 === null || ema21 === null || ema50 === null || rsi === null || aa.adx === null || aa.atr === null || !bb) {
+    return { signal: 'NONE', conf: 0, reason: 'indicators warming up' };
+  }
+  var last = closed[n - 1];
+  var bullishClose = last.c > last.o;
+  var bearishClose = last.c < last.o;
+
+  // ATR suitability: not dead-flat, not extreme vs the recent average candle range
+  var m = Math.min(20, n), avgRange = 0;
+  for (i = n - m; i < n; i++) avgRange += (highs[i] - lows[i]);
+  avgRange /= m;
+  var volOk = avgRange > 0 && aa.atr > avgRange * 0.25 && aa.atr < avgRange * 4;
+
+  var call = ema9 > ema21 && ema21 > ema50 && rsi >= 50 && rsi <= 65 && aa.adx > 20 && bullishClose && volOk;
+  var put = ema9 < ema21 && ema21 < ema50 && rsi >= 35 && rsi <= 50 && aa.adx > 20 && bearishClose && volOk;
+  var signal = call ? 'CALL' : (put ? 'PUT' : 'NONE');
+
+  var conf = 0;
+  var details = { ema9: ema9, ema21: ema21, ema50: ema50, rsi: +rsi.toFixed(1), adx: +aa.adx.toFixed(1), atr: aa.atr, bbMid: bb.middle };
+  if (signal !== 'NONE') {
+    conf = 70;
+    if (Math.abs(ema9 - ema50) > aa.atr * 0.5) conf += 5;      // strong EMA separation
+    if (signal === 'CALL') {
+      if (rsi >= 55 && rsi <= 60) conf += 5;                   // RSI centered in bullish zone
+      if (last.c > bb.middle) conf += 5;                      // price holding above BB middle
+    } else {
+      if (rsi >= 40 && rsi <= 45) conf += 5;                   // RSI centered in bearish zone
+      if (last.c < bb.middle) conf += 5;
+    }
+    if (aa.adx > 25) conf += 5;
+    if (aa.adx > 30) conf += 5;
+    conf = Math.min(97, conf);
+  }
+  return { signal: signal, conf: Math.round(conf), details: details, reason: signal === 'NONE' ? 'no setup' : 'setup found' };
+}
+
+/* ---------- Signal engine state ---------- */
+if (!window._qxLastSignalAt) window._qxLastSignalAt = {};  // per-asset last signal timestamp (gap)
+if (!window._qxSignals) window._qxSignals = [];            // real bot signals (mirrored to UI lists)
+if (!window._qxEngineTimer) window._qxEngineTimer = null;
+if (!window._qxSettleTimer) window._qxSettleTimer = null;
+
+function qxEngineReady() {
+  try { return qxIsConnected() && !S.stopped; } catch (e) { return false; }
+}
+
+/* Subscribe the native socket to the user's selected assets (call on connect) */
+function qxSubscribeAssets() {
+  try {
+    var n = qxNative();
+    if (!n || typeof n.subscribe !== 'function') return;
+    var as = S.assets || [];
+    for (var i = 0; i < as.length; i++) {
+      try { n.subscribe(qxWireAsset(as[i])); } catch (e) {}
+    }
+    // v2.0.13: after subscribing, try to load historical candles for immediate signals
+    setTimeout(qxLoadHistory, 3000);
+  } catch (e) {}
+}
+
+/* v2.0.13: Load historical candles (like old Termux bot) for immediate signals */
+function qxLoadHistory() {
+  try {
+    var n = qxNative();
+    if (!n || typeof n.getHistoryCandles !== 'function') return;
+    var as = S.assets || [];
+    for (var i = 0; i < as.length; i++) {
+      (function(asset) {
+        try {
+          var wire = qxWireAsset(asset);
+          var json = n.getHistoryCandles(wire);
+          if (!json) json = n.getHistoryCandles(asset);
+          if (!json) return;
+          var arr = JSON.parse(json);
+          if (!arr || !arr.length) return;
+          var norm = qxNormAsset(asset);
+          if (!window._qxCandles) window._qxCandles = {};
+          var candles = [];
+          for (var j = 0; j < arr.length; j++) {
+            var c = arr[j];
+            // Format: [time, open, high, low, close] or {t,o,h,l,c}
+            var t, o, h, l, cl;
+            if (c instanceof Array) {
+              t = c[0] * 1000; o = +c[1]; h = +c[2]; l = +c[3]; cl = +c[4];
+            } else {
+              t = (c.t || c.time || 0) * 1000; o = +c.o || +c.open; h = +c.h || +c.high;
+              l = +c.l || +c.low; cl = +c.c || +c.close;
+            }
+            if (!t || !isFinite(o)) continue;
+            var bucket = Math.floor(t / 60000) * 60000;
+            candles.push({ t: bucket, o: o, h: h, l: l, c: cl });
+          }
+          if (candles.length > 10) {
+            // Merge with existing (don't duplicate)
+            var existing = window._qxCandles[norm] || [];
+            var seen = {};
+            for (var k = 0; k < existing.length; k++) seen[existing[k].t] = 1;
+            for (var k = 0; k < candles.length; k++) {
+              if (!seen[candles[k].t]) existing.push(candles[k]);
+            }
+            existing.sort(function(a, b) { return a.t - b.t; });
+            if (existing.length > 150) existing.splice(0, existing.length - 150);
+            window._qxCandles[norm] = existing;
+          }
+        } catch (e) {}
+      })(as[i]);
+    }
+  } catch (e) {}
+}
+
+/* Phase 5: background engine leader election.
+   Only ONE WebView runs the signal engine at a time, so signals are generated
+   exactly once. While the foreground bot service runs, its hidden page owns
+   the engine; otherwise the visible app page owns it. */
+function qxEngineOwner() {
+  try {
+    var n = qxNative();
+    if (n && typeof n.amEngineOwner === 'function') return !!n.amEngineOwner();
+  } catch (e) {}
+  return true; // no native bridge (desktop preview): run the engine here
+}
+
+/* Phase 5: signals generated by the background service's engine are pushed
+   here so the visible app stays in sync (lists, history, dashboard). */
+window.onRemoteSignal = function (json) {
+  try {
+    var d = JSON.parse(json), i;
+    for (i = 0; i < window._qxSignals.length; i++) if (window._qxSignals[i].id === d.id) return; // de-dupe
+    var sig = {
+      id: d.id, asset: d.asset, dir: d.dir, conf: d.conf,
+      time: new Date(d.time), expiry: d.expiry, entryPrice: d.entryPrice,
+      settled: false, result: null, strong: d.strong, source: d.source || 'bot-7ind'
+    };
+    window._qxSignals.unshift(sig);
+    if (window._qxSignals.length > 30) window._qxSignals.pop();
+    demoRegular.unshift(sig);
+    if (demoRegular.length > 20) demoRegular.pop();
+    demoSignals.unshift(sig);
+    if (demoSignals.length > 20) demoSignals.pop();
+    renderSignals(); renderHome();
+  } catch (e) {}
+};
+window.onRemoteSettle = function (id, result, exitPrice) {
+  try {
+    var i, sig = null;
+    for (i = 0; i < window._qxSignals.length; i++) if (window._qxSignals[i].id === id) { sig = window._qxSignals[i]; break; }
+    if (!sig || sig.settled) return;
+    var win = result === 'WIN';
+    sig.settled = true; sig.result = result; sig.exitPrice = exitPrice;
+    sigHistory.unshift({ asset: sig.asset, dir: sig.dir, conf: sig.conf, time: sig.time, win: win, compound: false });
+    try { persistSigHistory(); } catch (e) {}
+    var st = strategies[0];
+    st.trades++; if (win) st.wins++;
+    st.acc = Math.round(st.wins / st.trades * 100);
+    renderSignals(); renderHome(); renderSigHistory(); renderStrategies(); renderDashStats();
+  } catch (e) {}
+};
+
+/* Main engine pass — every 30s: analyze eligible assets, emit real signals */
+function runSignalEngine() {
+  if (!qxEngineOwner()) return;
+  if (!qxEngineReady()) return;
+  var nowMs = Date.now();
+  var minConf = +S.minConf || 0;
+  var minPayout = +S.minPayout || 0;
+  var gapSec = +S.sigGap || 0;
+  var assets = S.assets || [];
+  var knowPayouts = (S.qxInstruments || []).length > 0;
+  for (var i = 0; i < assets.length; i++) {
+    var asset = assets[i];
+    if (knowPayouts && qxPayout(asset) < minPayout) continue;      // payout filter
+    if ((nowMs - (window._qxLastSignalAt[asset] || 0)) < gapSec * 1000) continue; // signal gap
+    var r;
+    try { r = analyzeAsset(asset); } catch (e) { continue; }
+    if (r.signal === 'NONE' || r.conf < minConf) continue;
+    var price = (window._qxPrices && window._qxPrices[qxNormAsset(asset)]) ? window._qxPrices[qxNormAsset(asset)].price : null;
+    var sig = {
+      id: 'qx' + nowMs + '_' + i,
+      asset: asset, dir: r.signal, conf: r.conf,
+      time: new Date(), expiry: +S.expiry || 60,
+      entryPrice: price, settled: false, result: null,
+      strong: r.conf >= (+S.strongConf || 85), source: 'bot-7ind'
+    };
+    window._qxSignals.unshift(sig);
+    if (window._qxSignals.length > 30) window._qxSignals.pop();
+    demoRegular.unshift(sig);                                     // Signals page (Regular tab)
+    if (demoRegular.length > 20) demoRegular.pop();
+    demoSignals.unshift(sig);                                     // Home live feed
+    if (demoSignals.length > 20) demoSignals.pop();
+    window._qxLastSignalAt[asset] = nowMs;
+    renderSignals(); renderHome();
+    if (S.pushSignals) toast('📡 <b>New signal:</b> ' + assetName(asset) + ' ' + r.signal + ' ' + r.conf + '%', 'gold');
+    // Phase 4: publish to website + Telegram (fire and forget)
+    try {
+      window._ptLastSignalAt = sig.time.toISOString();
+      PTWeb.publishSignal(sig).then(function() { PTWeb.syncBotStatus(); });
+      PTTelegram.sendSignal(sig);
+    } catch (e) {}
+    // Phase 5: hand the signal to native (background service forwards it to
+    // the visible app + raises a status-bar notification when app is hidden)
+    try {
+      var __n = qxNative();
+      if (__n && typeof __n.engineSignal === 'function') {
+        __n.engineSignal(JSON.stringify({
+          id: sig.id, asset: sig.asset, dir: sig.dir, conf: sig.conf,
+          time: sig.time.getTime(), expiry: sig.expiry,
+          entryPrice: sig.entryPrice, strong: sig.strong, source: sig.source
+        }));
+      }
+    } catch (e) {}
+  }
+}
+
+/* Settle expired signals locally (entry vs exit price) — every 5s */
+function settleSignals() {
+  if (!qxEngineOwner()) return;
+  if (!window._qxSignals.length) return;
+  var nowMs = Date.now(), changed = false, i, j;
+  for (i = 0; i < window._qxSignals.length; i++) {
+    var sig = window._qxSignals[i];
+    if (sig.settled) continue;
+    if (sig.time.getTime() + sig.expiry * 1000 > nowMs) continue;
+    var exit = null;
+    var arr = (window._qxCandles && window._qxCandles[qxNormAsset(sig.asset)]) || [];
+    var expBucket = Math.floor((sig.time.getTime() + sig.expiry * 1000) / 60000) * 60000;
+    for (j = arr.length - 1; j >= 0; j--) { if (arr[j].t >= expBucket) exit = arr[j].c; else break; }
+    if (exit === null && window._qxPrices && window._qxPrices[qxNormAsset(sig.asset)]) exit = window._qxPrices[qxNormAsset(sig.asset)].price;
+    if (exit === null || sig.entryPrice === null) continue;
+    var win = sig.dir === 'CALL' ? exit > sig.entryPrice : exit < sig.entryPrice; // tie = loss
+    sig.settled = true; sig.result = win ? 'WIN' : 'LOSS'; sig.exitPrice = exit;
+    sigHistory.unshift({ asset: sig.asset, dir: sig.dir, conf: sig.conf, time: sig.time, win: win, compound: false });
+    try { persistSigHistory(); } catch (e) {}
+    var st = strategies[0];
+    st.trades++; if (win) st.wins++;
+    st.acc = Math.round(st.wins / st.trades * 100);
+    changed = true;
+    if (S.pushResults) toast((win ? '✅ <b>WIN</b>' : '❌ <b>LOSS</b>') + ' ' + assetName(sig.asset) + ' ' + sig.dir + ' ' + sig.conf + '%', win ? 'green' : 'red');
+    // Phase 4: settle on website + Telegram result (fire and forget)
+    try {
+      var amt = (typeof S.amount === 'number') ? S.amount : 10;
+      var pnl = win ? +(amt * 0.8).toFixed(2) : -amt;
+      PTWeb.settleSignal(sig, win ? 'win' : 'loss', exit, pnl).then(function() { PTWeb.syncBotStatus(); });
+      PTTelegram.sendResult(sig, win ? 'win' : 'loss', pnl);
+    } catch (e) {}
+    // Phase 5: forward the settle to native (visible app sync + notification)
+    try {
+      var __n2 = qxNative();
+      if (__n2 && typeof __n2.engineSettled === 'function') __n2.engineSettled(sig.id, sig.result, sig.exitPrice);
+    } catch (e) {}
+  }
+  if (changed) { renderSignals(); renderHome(); renderSigHistory(); renderStrategies(); renderDashStats(); }
+}
+
+/* Dashboard Hisab Kitab — from real settled signal results */
+function renderDashStats() {
+  var wins = 0, losses = 0, i;
+  for (i = 0; i < sigHistory.length; i++) { if (sigHistory[i].win) wins++; else losses++; }
+  var total = wins + losses;
+  var wr = total ? Math.round(wins / total * 100) : 0;
+  var el;
+  el = $('stWinRate'); if (el) el.textContent = wr + '%';
+  el = $('stWins'); if (el) el.textContent = wins;
+  el = $('stLosses'); if (el) el.textContent = losses;
+  el = $('stTotal'); if (el) el.textContent = total;
+  el = $('wrPct'); if (el) el.textContent = wr + '%';
+}
+
+/* Start/stop the engine timers (idempotent) */
+function startSignalEngine() {
+  if (!window._qxEngineTimer) window._qxEngineTimer = setInterval(runSignalEngine, 30000);
+  if (!window._qxSettleTimer) window._qxSettleTimer = setInterval(settleSignals, 5000);
+}
+
+/* ================= PHASE 4: WEBSITE API + TELEGRAM =================
+   Real signal pipeline: emitRealSignal(sig) -> UI list + Supabase + Telegram
+   settleRealSignal(sig, result, exitPrice) -> UI + Supabase update + Telegram
+   Canonical signal object:
+   { id, webId, asset, dir ('CALL'|'PUT'), conf, time (Date), expiry (sec),
+     entryPrice, strong, settled, result }
+------------------------------------------------------------------------ */
+const PT_SB_URL = 'https://sovvicsyflemmrfghwan.supabase.co';
+const PT_SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvdnZpY3N5ZmxlbW1yZmdod2FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NzE2NjksImV4cCI6MjEwNjI0NzY2OX0.PB4Rz9acHTO4kLFuFYelG85AW5E2qIJkPEwnFGfOiQw';
+const PT_SB_HEADERS = {
+  'apikey': PT_SB_ANON,
+  'Authorization': 'Bearer ' + PT_SB_ANON,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+};
+
+/* ---------- Supabase website API ---------- */
+const PTWeb = {
+  // offline queue for signals that failed to publish
+  _queue: [],
+  _syncing: false,
+
+  async publishSignal(sig) {
+    const row = {
+      asset: sig.asset,
+      direction: sig.dir,
+      confidence: sig.conf,
+      entry_time: (sig.time instanceof Date ? sig.time : new Date(sig.time)).toISOString(),
+      expiry_seconds: sig.expiry || 60,
+      source: 'bot',
+      status: 'open',
+      strategy: '7-indicator',
+      entry_price: sig.entryPrice != null ? sig.entryPrice : null
+    };
+    try {
+      const r = await fetch(PT_SB_URL + '/rest/v1/signals', {
+        method: 'POST', headers: PT_SB_HEADERS, body: JSON.stringify(row)
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      if (data && data[0] && data[0].id) { sig.webId = data[0].id; }
+      return sig.webId || true;
+    } catch (e) {
+      // queue for retry when back online
+      this._queue.push({ type: 'publish', sig: sig });
+      return false;
+    }
+  },
+
+  async settleSignal(sig, result, exitPrice, pnl) {
+    // result: 'win' | 'loss'
+    if (!sig.webId) {
+      // never published (was queued) — mark queue entry
+      const q = this._queue.find(x => x.type === 'publish' && x.sig.id === sig.id);
+      if (q) q.settled = { result, exitPrice, pnl };
+      return false;
+    }
+    try {
+      const r = await fetch(PT_SB_URL + '/rest/v1/signals?id=eq.' + sig.webId, {
+        method: 'PATCH',
+        headers: PT_SB_HEADERS,
+        body: JSON.stringify({
+          status: result, exit_price: exitPrice != null ? exitPrice : null,
+          settled_by: 'bot', pnl: pnl != null ? pnl : 0
+        })
+      });
+      return r.ok;
+    } catch (e) { return false; }
+  },
+
+  async syncBotStatus() {
+    const connected = (typeof qxIsConnected === 'function') ? qxIsConnected() : false;
+    const body = {
+      id: 1,
+      connected: !!connected,
+      ssid_valid: !!(S.ssid && S.ssid.length > 8),
+      auto_publish: true,
+      auto_settle: true,
+      last_signal_at: window._ptLastSignalAt || null,
+      updated_at: new Date().toISOString()
+    };
+    try {
+      await fetch(PT_SB_URL + '/rest/v1/bot_status', {
+        method: 'POST', headers: Object.assign({}, PT_SB_HEADERS, { 'Prefer': 'resolution=merge-duplicates' }),
+        body: JSON.stringify(body)
+      });
+    } catch (e) {}
+  },
+
+  // retry queued publishes (call periodically / on reconnect)
+  async flushQueue() {
+    if (this._syncing || !this._queue.length) return;
+    this._syncing = true;
+    const pending = this._queue.splice(0, this._queue.length);
+    for (const item of pending) {
+      if (item.type === 'publish') {
+        const ok = await this.publishSignal(item.sig);
+        if (ok && item.settled) {
+          await this.settleSignal(item.sig, item.settled.result, item.settled.exitPrice, item.settled.pnl);
+        }
+        if (!ok) this._queue.push(item); // still offline — requeue
+      }
+    }
+    this._syncing = false;
+  }
+};
+// expose for Phase 3 engine + debugging
+window.PTWeb = PTWeb;
+
+/* ---------- Telegram ---------- */
+const PTTelegram = {
+  _lastSent: 0,
+  _minGapMs: 1500, // avoid Telegram rate limits
+
+  _canSend() {
+    return !!(S.tgToken && S.tgChat && S.tgSignals);
+  },
+
+  async _post(text, ignoreGate) {
+    if (!ignoreGate && !this._canSend()) return false;
+    if (!(S.tgToken && S.tgChat)) return false;
+    const nowMs = Date.now();
+    if (nowMs - this._lastSent < this._minGapMs) {
+      await new Promise(r => setTimeout(r, this._minGapMs - (nowMs - this._lastSent)));
+    }
+    this._lastSent = Date.now();
+    try {
+      const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: String(S.tgChat).trim(), text: text, parse_mode: 'HTML' })
+      });
+      return r.ok;
+    } catch (e) { return false; }
+  },
+
+  fmtTime(d) {
+    try { const x = (d instanceof Date) ? d : new Date(d); return x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    catch (e) { return ''; }
+  },
+
+  async sendSignal(sig) {
+    if (!S.pushSignals) return false;
+    const arrow = sig.dir === 'CALL' ? '🟢' : '🔴';
+    const text =
+      '📡 <b>NEW SIGNAL</b>\n' +
+      'Asset: <b>' + assetName(sig.asset) + '</b>\n' +
+      'Direction: <b>' + sig.dir + '</b> ' + arrow + '\n' +
+      'Confidence: <b>' + sig.conf + '%</b>\n' +
+      'Expiry: <b>' + (sig.expiry || 60) + 's</b>\n' +
+      'Time: ' + this.fmtTime(sig.time);
+    return this._post(text);
+  },
+
+  async sendResult(sig, result, pnl) {
+    if (!S.pushResults) return false;
+    const win = result === 'win';
+    const icon = win ? '✅' : '❌';
+    const amt = (pnl != null) ? (' ' + (win ? '+' : '') + '$' + Number(pnl).toFixed(2)) : '';
+    const text = icon + ' <b>' + (win ? 'WIN' : 'LOSS') + '</b> — ' +
+      assetName(sig.asset) + ' ' + sig.dir + amt;
+    return this._post(text);
+  },
+
+  async sendText(text) { return this._post(text); },
+
+  // v2.0.1: status alerts (connect/disconnect) — needs only token+chat, not signal alerts
+  async sendStatus(text) { return this._post(text, true); },
+
+  // v2.0.3: returns the REAL Telegram error so the user can fix token/chat
+  async testSend() {
+    if (!(S.tgToken && S.tgChat)) return { ok: false, detail: 'Token ya Chat ID khaali hai' };
+    try {
+      const url = 'https://api.telegram.org/bot' + String(S.tgToken).trim() + '/sendMessage';
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: String(S.tgChat).trim(), text: '✅ Prime Trader test — Telegram kaam kar raha hai!' })
+      });
+      const body = await r.text();
+      let desc = body;
+      try { const j = JSON.parse(body); if (j.description) desc = j.description; } catch (e) {}
+      return { ok: r.ok, detail: 'HTTP ' + r.status + ' — ' + String(desc).slice(0, 200) };
+    } catch (e) { return { ok: false, detail: 'Network error: ' + e.message }; }
+  }
+};
+window.PTTelegram = PTTelegram;
+
+/* ---------- Central signal pipeline ---------- */
+// Called by the signal engine (Phase 3) for every new real signal.
+// Adds to UI list, publishes to website, sends Telegram.
+function emitRealSignal(sig) {
+  // normalize
+  sig.id = sig.id || ('sig_' + Date.now() + '_' + Math.floor(Math.random() * 1e6));
+  sig.time = (sig.time instanceof Date) ? sig.time : new Date(sig.time || Date.now());
+  sig.expiry = sig.expiry || 60;
+  sig.settled = false; sig.result = null; sig.webId = null;
+  // 1) UI — newest first
+  demoSignals.unshift(sig);
+  if (demoSignals.length > 10) demoSignals.pop();
+  try { renderHome(); } catch (e) {}
+  try { if (typeof renderSignals === 'function') renderSignals(); } catch (e) {}
+  // 2) Website (Supabase) — fire and forget
+  window._ptLastSignalAt = sig.time.toISOString();
+  PTWeb.publishSignal(sig).then(() => PTWeb.syncBotStatus());
+  // 3) Telegram — fire and forget
+  PTTelegram.sendSignal(sig);
+  // 4) schedule settlement at expiry
+  const settleInMs = Math.max(1000, sig.expiry * 1000);
+  setTimeout(() => settleRealSignal(sig), settleInMs);
+  return sig;
+}
+window.emitRealSignal = emitRealSignal;
+
+// Settles a signal at expiry: compares entry vs current price.
+function settleRealSignal(sig) {
+  if (!sig || sig.settled) return;
+  sig.settled = true;
+  // current price from the live tick cache (fallback: entry price = push)
+  let cur = null;
+  try {
+    const tick = window._qxPrices && window._qxPrices[qxNormAsset(sig.asset)];
+    if (tick) cur = tick.price;
+  } catch (e) {}
+  const entry = (sig.entryPrice != null) ? sig.entryPrice : cur;
+  let result = 'loss', pnl = 0;
+  if (entry != null && cur != null) {
+    const won = sig.dir === 'CALL' ? (cur > entry) : (cur < entry);
+    // push (exact equal) counts as loss for the signal record
+    result = won ? 'win' : 'loss';
+    const amt = (typeof S.amount === 'number') ? S.amount : 10;
+    const payoutPct = 80; // settled P&L estimate; real trade P&L comes from trade records
+    pnl = won ? +(amt * payoutPct / 100).toFixed(2) : -amt;
+  }
+  sig.result = result;
+  // strategy stats
+  try {
+    const st = strategies[0];
+    if (st) { st.trades++; if (result === 'win') st.wins++; st.acc = Math.round(st.wins / st.trades * 100); }
+  } catch (e) {}
+  // signal history
+  try { sigHistory.unshift({ asset: sig.asset, dir: sig.dir, conf: sig.conf, time: sig.time, result: result.toUpperCase(), pnl: pnl }); persistSigHistory(); } catch (e) {}
+  try { renderHome(); } catch (e) {}
+  try { if (typeof renderSignals === 'function') renderSignals(); } catch (e) {}
+  // website + telegram
+  PTWeb.settleSignal(sig, result, cur, pnl).then(() => PTWeb.syncBotStatus());
+  PTTelegram.sendResult(sig, result, pnl);
+}
+window.settleRealSignal = settleRealSignal;
+
+// Periodic maintenance: flush offline queue + sync bot status every 60s
+setInterval(() => { PTWeb.flushQueue(); PTWeb.syncBotStatus(); }, 60000);
 
 /* ---------- SETTINGS BINDINGS ---------- */
 function bindRange(id, key, fmt, vid) {
@@ -784,6 +1561,17 @@ function initSettings() {
   bindRange('inFutureMinConf', 'futureMinConf', v => v + '%', 'vFutureMinConf');
   bindRange('inFuturePayout', 'futurePayout', v => v + '%', 'vFuturePayout');
   bindRange('inAmount', 'amount', v => '$' + v, 'vAmount');
+  // Manual base amount input — syncs with slider
+  $('inAmountManual').addEventListener('change', e => {
+    let v = Math.round(+e.target.value);
+    if (isNaN(v)) return;
+    v = Math.max(1, Math.min(3000, v));
+    S = store.set({ amount: v });
+    $('inAmount').value = v;
+    $('vAmount').textContent = '$' + v;
+    e.target.value = '';
+    toast('💰 Base amount set to <b>$' + v + '</b>', 'green');
+  });
   bindRange('inAutoTradeConf', 'autoTradeConf', v => v + '%', 'vAutoTradeConf');
   $('inAutoTradeConf').addEventListener('change', () => toast('🎯 Auto-trade only on ' + S.autoTradeConf + '%+ signals', 'gold'));
   bindRange('inMtgMult', 'mtgMult', v => v.toFixed(1) + '×', 'vMtgMult');
@@ -796,6 +1584,7 @@ function initSettings() {
   bindToggle('tAutoStop', 'autoStop');
   bindToggle('tNewsPause', 'newsPause');
   bindToggle('tTgSignals', 'tgSignals');
+  bindToggle('tTgStatus', 'tgStatus');
   bindToggle('tPushSignals', 'pushSignals');
   bindToggle('tPushResults', 'pushResults');
   bindToggle('tPushSsid', 'pushSsid');
@@ -816,6 +1605,30 @@ function initSettings() {
   $$('#themeGrid .theme-opt').forEach(o => {
     o.classList.toggle('selected', o.dataset.themeOpt === S.theme);
     o.addEventListener('click', () => { applyTheme(o.dataset.themeOpt); toast('🎨 Theme: ' + o.querySelector('.theme-name').textContent, 'gold'); });
+  });
+  // v2.0.1: connection diagnostics
+  var btnDiag = $('btnDiagRefresh');
+  if (btnDiag) btnDiag.addEventListener('click', renderDiagnostics);
+  // v2.0.3: copy raw diagnostics JSON to clipboard — user pastes it in chat
+  var btnCopy = $('btnDiagCopy');
+  if (btnCopy) btnCopy.addEventListener('click', function () {
+    var n = qxNative();
+    var txt = 'no native bridge';
+    try { txt = n && n.getDiagnostics ? n.getDiagnostics() : txt; } catch (e) { txt = 'error: ' + e.message; }
+    var done = function (ok) { toast(ok ? '📋 Report copy ho gayi — mujhe chat me paste kardo' : '❌ Copy nahi hui', ok ? 'green' : 'red'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function () { done(true); }, function () { done(false); });
+      } else { done(false); }
+    } catch (e) { done(false); }
+  });
+  // v2.0.3: Telegram test with the real error shown
+  var btnTg = $('btnTgTest');
+  if (btnTg) btnTg.addEventListener('click', function () {
+    toast('✈️ Telegram test bheja ja raha hai...', 'gold');
+    PTTelegram.testSend().then(function (res) {
+      toast((res.ok ? '✅ ' : '❌ ') + res.detail, res.ok ? 'green' : 'red');
+    });
   });
   // assets
   renderAssetChips();
@@ -1214,6 +2027,7 @@ function init() {
   renderSsid();
   renderHome();
   renderSignals();
+  renderDashStats();
   renderLiveTrades();
   renderBatches();
   renderSigHistory();
@@ -1221,6 +2035,8 @@ function init() {
   initSettings();
   observeReveals();
   setTimeout(drawCharts, 120);
+  // Phase 3: start the real 7-indicator signal engine timers (runs only when connected)
+  startSignalEngine();
   // version badge + silent update check on app start
   const av = $('appVer');
   if (av) av.textContent = 'v' + APP_VERSION + ' • GitHub: prime-trader-app';

@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.primetrader.signals"
-    android:versionCode="13"
-    android:versionName="1.1.2">
+    android:versionCode="50"
+    android:versionName="2.0.29">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Phase 5: foreground service keeps the bot socket + signal engine alive -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Let the package installer be visible/resolvable on Android 11+ -->
     <queries>
@@ -41,6 +45,14 @@
             android:authorities="com.primetrader.signals.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <!-- Phase 5: foreground service — keeps the Quotex socket and the
+             7-indicator signal engine alive when the app is backgrounded.
+             dataSync type: market-data synchronization. -->
+        <service
+            android:name=".QuotexService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 
