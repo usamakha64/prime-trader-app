@@ -1,5 +1,5 @@
 {
-  "version": "2.0.10",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.10/PrimeTrader.apk",
-  "changelog": "v2.0.10: Pairs merge (no more 92->24 drop)."
+  "version": "2.0.11",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.11/PrimeTrader.apk",
+  "changelog": "v2.0.11: Balance via Quotex web login."
 }
