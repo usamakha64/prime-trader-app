@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.45';
+const APP_VERSION = '2.0.46';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -813,6 +813,10 @@ window.onQxConnected = function (host) {
     // Phase 3: subscribe the socket to the user's selected assets for the signal engine
     qxSubscribeAssets();
     startSignalEngine();
+    // v2.0.46: Load historical candles for immediate signals (was defined but never called!)
+    setTimeout(() => { try { qxLoadHistory(); } catch (e) {} }, 5000);
+    // Retry history load every 30s to pick up newly arrived history data
+    setInterval(() => { try { qxLoadHistory(); } catch (e) {} }, 30000);
   }
 };
 // Called by native when the socket drops.
