@@ -1,5 +1,5 @@
 {
-  "version": "2.0.23",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.23/PrimeTrader.apk",
-  "changelog": "v2.0.23: Balance from websocket auth (Termux flow)."
+  "version": "2.0.24",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.24/PrimeTrader.apk",
+  "changelog": "v2.0.24: Full account removal on Disconnect."
 }
