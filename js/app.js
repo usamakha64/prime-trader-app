@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.42';
+const APP_VERSION = '2.0.43';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -845,6 +845,24 @@ window.onQxInstruments = function (jsonStr) {
     renderAssetChips();
   } catch (e) {}
 };
+// v2.0.43: Load saved candles from localStorage on startup (survives app updates)
+try {
+  var savedCandles = localStorage.getItem('pt-candles-v1');
+  if (savedCandles) {
+    window._qxCandles = JSON.parse(savedCandles);
+    console.log('[candles] Restored from storage:', Object.keys(window._qxCandles).length, 'pairs');
+  }
+} catch (e) { console.log('[candles] Restore failed:', e); }
+
+// v2.0.43: Save candles to localStorage every 30s (max ~400KB)
+setInterval(() => {
+  try {
+    if (window._qxCandles && Object.keys(window._qxCandles).length > 0) {
+      localStorage.setItem('pt-candles-v1', JSON.stringify(window._qxCandles));
+    }
+  } catch (e) {}
+}, 30000);
+
 // Called by native for every real price tick: onPriceTick(asset, timestampMs, price)
 window.onPriceTick = function (asset, ts, price) {
   try {
@@ -1690,10 +1708,11 @@ function renderAssetChips() {
       const name = inst.name || inst.asset || inst.symbol;
       const payout = inst.payout || inst.profit || 0;
       const selected = S.assets.includes(name);
-      // Check if this pair is actively streaming (tick within last 15 sec)
+      // Check if this pair is actively streaming (tick within last 60 sec)
+      // v2.0.43: increased from 15s to 60s — some pairs have sparse ticks
       const norm = qxNormAsset(name);
       const tick = prices[norm] || prices[name];
-      const isStreaming = tick && (now - tick.ts < 15000);
+      const isStreaming = tick && (now - tick.ts < 60000);
       if (isStreaming) streamingCount++;
       const liveDot = isStreaming ? '<span class="live-dot" title="Streaming live">🟢</span>' : '<span class="live-dot" title="No ticks yet">⚪</span>';
       return `<button class="chip ${selected ? 'on' : ''}" data-asset="${name}">${liveDot} ${assetName(name)} <span class="payout">${payout}%</span></button>`;
