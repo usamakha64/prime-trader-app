@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.38';
+const APP_VERSION = '2.0.39';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -1407,10 +1407,10 @@ const PTTelegram = {
         const n = qxNative();
         if (n && typeof n.sendTelegramNative === 'function') {
           const cbId = 'tg' + Date.now() + Math.floor(Math.random() * 10000);
-          // timeout: resolve with error if native doesn't call back in 25s
+          // v2.0.39: 15s timeout (native uses 10s timeouts now)
           const to = setTimeout(() => {
-            if (PTTelegram._pending[cbId]) { delete PTTelegram._pending[cbId]; resolve('error: timeout'); }
-          }, 25000);
+            if (PTTelegram._pending[cbId]) { delete PTTelegram._pending[cbId]; resolve('error: timeout (no response from app — try again)'); }
+          }, 15000);
           PTTelegram._pending[cbId] = (result) => { clearTimeout(to); resolve(result); };
           n.sendTelegramNative(String(S.tgToken).trim(), String(S.tgChat).trim(), text, cbId);
           return;
@@ -2063,6 +2063,28 @@ function init() {
   setTimeout(drawCharts, 120);
   // Phase 3: start the real 7-indicator signal engine timers (runs only when connected)
   startSignalEngine();
+  // v2.0.39: AUTO-LOGIN on startup — if SSID is saved, connect automatically.
+  // User never has to tap "Login & Connect" again (unless SSID expires).
+  setTimeout(() => {
+    try {
+      if (qxIsConnected()) return; // already connected
+      const n = qxNative();
+      if (n && typeof n.getSavedSsid === 'function') {
+        const saved = n.getSavedSsid();
+        if (saved && saved.length > 10) {
+          toast('🔄 <b>Auto-connecting...</b> Saved session found.', 'gold');
+          // Use native connect (starts foreground service too)
+          if (typeof n.connect === 'function') {
+            n.connect(saved);
+          } else {
+            // fallback: BotEngine direct via bridge
+            window._autoSsid = saved;
+            if (window.onQuotexLogin) window.onQuotexLogin(true);
+          }
+        }
+      }
+    } catch (e) {}
+  }, 2000);
   // version badge + silent update check on app start
   const av = $('appVer');
   if (av) av.textContent = 'v' + APP_VERSION + ' • GitHub: prime-trader-app';

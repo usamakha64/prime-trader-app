@@ -372,11 +372,13 @@ public class MainActivity extends Activity {
             java.net.HttpURLConnection conn = null;
             try {
                 java.net.URL url = new java.net.URL("https://api.telegram.org/bot" + t + "/sendMessage");
-                conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(15000);
+                // v2.0.39: NO_PROXY (avoid system proxy issues), shorter timeouts for faster failure
+                conn = (java.net.HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("User-Agent", "PrimeTrader/2.0");
                 conn.setDoOutput(true);
                 org.json.JSONObject body = new org.json.JSONObject();
                 body.put("chat_id", c);
@@ -399,8 +401,12 @@ public class MainActivity extends Activity {
                     }
                 } catch (Exception ignored) {}
                 return "error: HTTP " + code + " " + err;
+            } catch (java.net.SocketTimeoutException e) {
+                return "error: timeout (api.telegram.org slow/unreachable — check VPN/network)";
+            } catch (java.net.UnknownHostException e) {
+                return "error: DNS failed for api.telegram.org — check internet/DNS";
             } catch (Exception e) {
-                return "error: " + e.getMessage();
+                return "error: " + e.getClass().getSimpleName() + ": " + e.getMessage();
             } finally {
                 if (conn != null) try { conn.disconnect(); } catch (Exception ignored) {}
             }
@@ -1000,6 +1006,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getBalance() {
             return BotEngine.get().getBalanceJson();
+        }
+
+        /** v2.0.39: return saved SSID for auto-login on startup (empty if none). */
+        @JavascriptInterface
+        public String getSavedSsid() {
+            try {
+                return BotEngine.get().getSavedSsid(MainActivity.this);
+            } catch (Exception e) {
+                return "";
+            }
         }
 
         /** REAL: instruments/pairs list JSON (empty array until received). */
