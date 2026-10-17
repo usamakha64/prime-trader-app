@@ -1,5 +1,5 @@
 {
-  "version": "2.0.28",
-  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.0.28/PrimeTrader.apk",
-  "changelog": "v2.0.28: Termux-style manual SSID; balance event payload fix; broken auto-login removed."
+  "version": "2.1.04",
+  "apk_url": "https://github.com/usamakha64/prime-trader-app/releases/download/v2.1.04/PrimeTrader-v2.1.04.apk",
+  "notes": "WebView cache disabled, TIME mode trading, pre-trade setup"
 }
