@@ -52,22 +52,22 @@
     <div class="stat-grid">
       <div class="stat-card gold reveal shine">
         <div class="stat-ico">🎯</div>
-        <div class="stat-num" id="stWinRate">0%</div>
+        <div class="stat-num" id="stWinRate">68%</div>
         <span class="stat-label">Win Rate</span>
       </div>
       <div class="stat-card green reveal">
         <div class="stat-ico">✅</div>
-        <div class="stat-num" id="stWins">0</div>
+        <div class="stat-num" id="stWins">47</div>
         <span class="stat-label">Wins</span>
       </div>
       <div class="stat-card red reveal">
         <div class="stat-ico">❌</div>
-        <div class="stat-num" id="stLosses">0</div>
+        <div class="stat-num" id="stLosses">22</div>
         <span class="stat-label">Losses</span>
       </div>
       <div class="stat-card reveal">
         <div class="stat-ico">📊</div>
-        <div class="stat-num" id="stTotal">0</div>
+        <div class="stat-num" id="stTotal">69</div>
         <span class="stat-label">Total Trades</span>
       </div>
       <div class="stat-card stat-wide green reveal">
@@ -75,7 +75,7 @@
           <div class="stat-ico" style="margin-bottom:.2rem">💰</div>
           <span class="stat-label">Today's P&amp;L</span>
         </div>
-        <div class="stat-num" id="stPnl">+$0</div>
+        <div class="stat-num" id="stPnl">+$1,240</div>
       </div>
     </div>
 
@@ -84,7 +84,7 @@
       <div class="row-between">
         <div>
           <div class="tiny text-muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:700">Account Balance</div>
-          <div style="font-size:1.5rem;font-weight:800;margin-top:.15rem" id="stBalance">$0.00</div>
+          <div style="font-size:1.5rem;font-weight:800;margin-top:.15rem" id="stBalance">$5,258.00</div>
         </div>
         <div class="progress-ring" id="wrRing">
           <svg width="74" height="74" viewBox="0 0 74 74">
@@ -92,12 +92,12 @@
             <circle id="wrArc" cx="37" cy="37" r="30" fill="none" stroke="var(--accent)" stroke-width="7"
               stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="60"/>
           </svg>
-          <div class="pct" id="wrPct">0%</div>
+          <div class="pct" id="wrPct">68%</div>
         </div>
       </div>
       <div class="row-between mt1">
         <span class="pill pill-gold">⚡ Bot Running</span>
-        <span class="small text-muted" id="batchLabel">Connect to Quotex for live data</span>
+        <span class="small text-muted" id="batchLabel">Batch #373 • 64 pairs streaming</span>
       </div>
     </div>
 
@@ -214,55 +214,17 @@
         </div>
         <div class="field">
           <label>Session ID</label>
-          <div class="pwd-wrap">
-            <input type="password" id="inSsid" placeholder="Paste new SSID here">
-            <button type="button" class="pwd-toggle" id="btnSsidToggle" aria-label="Show SSID">👁️</button>
-          </div>
-          <div class="hint">Save connects to Quotex. Expiry sends an in-app notification.</div>
-          <div class="hint" style="margin-top:.5rem">💡 <b>SSID kaise lein:</b> Laptop Chrome me Quotex kholo → F12 → Console → paste karo:<br>
-            <code id="ssidCmd" style="user-select:all">copy(window.settings.token)</code>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnCopySsidCmd" style="margin-top:.25rem">📋 Copy Command</button>
-          </div>
+          <input type="password" id="inSsid" placeholder="Paste new SSID here">
+          <div class="hint">Pasting a new SSID auto-restarts the bot. Expiry sends an in-app notification.</div>
         </div>
-        <!-- v2.0.13: Quotex email/password (like Termux bot .env) for balance -->
-        <div class="field">
-          <label>Quotex Email (Balance ke liye)</label>
-          <input type="email" id="inQxEmail" placeholder="tumhara@email.com" autocomplete="email">
-          <div class="hint">Purane bot jaisa — ek dafa dalo, balance khud aayega.</div>
-        </div>
-        <div class="field">
-          <label>Quotex Password</label>
-          <div class="pwd-wrap">
-            <input type="password" id="inQxPass" placeholder="••••••••" autocomplete="current-password">
-          </div>
-          <div class="hint">Sirf tumhare phone me save hoga, kahin nahi bheja jayega.</div>
-        </div>
-        <button class="btn btn-gold btn-block" id="btnQxLogin">🔐 Login &amp; Connect</button>
-        <div class="hint" style="margin:.5rem 0">Email/password se auto-login — SSID paste karne ki zaroorat nahi.</div>
-        <button class="btn btn-ghost btn-block" id="btnSaveSsid">💾 Save &amp; Connect (manual SSID)</button>
-        <button class="btn btn-ghost btn-sm btn-block mt1" id="btnCopySsid" style="display:none">📋 Copy SSID</button>
-        <button class="btn btn-ghost btn-sm btn-block mt1" id="btnDisconnectSsid" style="display:none">🔌 Disconnect</button>
-        <!-- v2.0.25: Removed manual Quotex login button (Termux auto-login now) -->
-      </div>
-    </div>
-
-    <!-- CONNECTION DIAGNOSTICS (v2.0.1) -->
-    <div class="set-section">
-      <div class="set-section-title">🩺 Connection Diagnostics</div>
-      <div class="card" style="margin-bottom:0">
-        <div class="tiny text-muted" style="margin-bottom:.5rem">Is se pata chalega Quotex connection me kahan masla hai.</div>
-        <div id="diagBox" class="tiny" style="white-space:pre-wrap;line-height:1.7">Abhi check nahi hua — neeche button dabao.</div>
-        <button class="btn btn-gold btn-block mt1" id="btnDiagRefresh">🔄 Refresh Diagnostics</button>
-        <button class="btn btn-ghost btn-block mt1" id="btnDiagReport">📤 Send Report to Telegram</button>
-        <button class="btn btn-ghost btn-block mt1" id="btnDiagCopy">📋 Copy Raw Report</button>
-        <button class="btn btn-ghost btn-block mt1" id="btnTickReport">📊 Tick Report (per-pair)</button>
-        <button class="btn btn-ghost btn-block mt1" id="btnTgTest">✈️ Test Telegram</button>
+        <button class="btn btn-gold btn-block" id="btnSaveSsid">💾 Save &amp; Restart Bot</button>
+        <button class="btn btn-ghost btn-sm btn-block mt1" id="btnSimExpire">🔔 Simulate Expire Notification (demo)</button>
       </div>
     </div>
 
     <!-- SIGNALS -->
     <div class="set-section">
-      <div class="set-section-title">📡 Regular Signals</div>
+      <div class="set-section-title">📡 Signal Settings</div>
       <div class="set-row"><div><div class="set-label">Min Confidence</div><div class="set-desc">Signals below this are ignored</div></div><span class="set-val" id="vMinConf">75%</span></div>
       <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMinConf" min="50" max="95" value="75"></div>
       <div class="set-row"><div><div class="set-label">Strong Signal</div><div class="set-desc">Batched as strong signals</div></div><span class="set-val" id="vStrongConf">85%</span></div>
@@ -277,13 +239,7 @@
         <div class="chip-wrap" id="sigPeriodChips" style="padding:.25rem 0"></div>
       </div>
       <div class="set-row"><div><div class="set-label">Signal Gap</div><div class="set-desc">Minimum gap between two signals</div></div><span class="set-val" id="vSigGap">120s</span></div>
-      <div class="card" style="border-radius:0;margin:0;border-top:none"><div class="chip-wrap" id="sigGapChips" style="padding:.25rem 0"></div></div>
-      <div class="set-row" style="border-radius:0"><div><div class="set-label">Expiry</div><div class="set-desc">Regular signals trade duration</div></div><span class="set-val" id="vExpiry">1 min</span></div>
-      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><div class="chip-wrap" id="expiryChips" style="padding:.25rem 0">
-        <button class="chip" data-expiry="60">1 min</button>
-        <button class="chip" data-expiry="120">2 min</button>
-        <button class="chip" data-expiry="300">5 min</button>
-      </div></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><div class="chip-wrap" id="sigGapChips" style="padding:.25rem 0"></div></div>
     </div>
 
     <!-- FUTURE SIGNALS -->
@@ -325,19 +281,22 @@
 
     <!-- TRADING -->
     <div class="set-section">
-      <div class="set-section-title">💹 Trade AI Bot</div>
+      <div class="set-section-title">💹 Trade Settings</div>
       <div class="set-row"><div class="set-label">Auto Trade</div><label class="toggle"><input type="checkbox" id="tAutoTrade" checked><span class="track"></span></label></div>
       <div class="set-row"><div><div class="set-label">Base Amount</div><div class="set-desc">USD per trade</div></div><span class="set-val" id="vAmount">$10</span></div>
-      <div class="card" style="border-radius:0;margin:0;border-top:none">
-        <input type="range" id="inAmount" min="1" max="3000" value="10">
-        <div class="field" style="margin-top:.5rem"><input type="number" id="inAmountManual" min="1" max="3000" placeholder="Or type exact amount (1-3000)"></div>
-      </div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAmount" min="1" max="500" value="10"></div>
       <div class="set-row" style="border-radius:0"><div><div class="set-label">Auto-Trade Confidence</div><div class="set-desc">Bot only auto-trades signals at/above this — lower ones show as signals only, no trade</div></div><span class="set-val" id="vAutoTradeConf">85%</span></div>
       <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inAutoTradeConf" min="50" max="95" value="85"></div>
       <div class="set-row"><div><div class="set-label">MTG Multiplier</div><div class="set-desc">Stake multiplier after a loss</div></div><span class="set-val" id="vMtgMult">2.0×</span></div>
       <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMtgMult" min="1" max="5" step="0.1" value="2"></div>
       <div class="set-row" style="border-radius:0"><div><div class="set-label">Max MTG Steps</div><div class="set-desc">Stop after N martingale steps</div></div><span class="set-val" id="vMtgSteps">3</span></div>
-      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><input type="range" id="inMtgSteps" min="1" max="5" value="3"></div>
+      <div class="card" style="border-radius:0;margin:0;border-top:none"><input type="range" id="inMtgSteps" min="1" max="5" value="3"></div>
+      <div class="set-row" style="border-radius:0"><div><div class="set-label">Expiry</div><div class="set-desc">Trade duration — which expiry signals to take</div></div><span class="set-val" id="vExpiry">1 min</span></div>
+      <div class="card" style="border-radius:0 0 14px 14px;margin:0;border-top:none"><div class="chip-wrap" id="expiryChips" style="padding:.25rem 0">
+        <button class="chip" data-expiry="60">1 min</button>
+        <button class="chip" data-expiry="120">2 min</button>
+        <button class="chip" data-expiry="300">5 min</button>
+      </div></div>
     </div>
 
     <!-- COMPOUNDING -->
@@ -377,9 +336,8 @@
       <div class="set-section-title">✈️ Telegram</div>
       <div class="card">
         <div class="field"><label>Bot Token</label><input type="password" id="inTgToken" placeholder="123456:ABC-DEF..."></div>
-        <div class="field"><label>Chat / Channel ID</label><input type="text" id="inTgChat" placeholder="ID"></div>
-        <div class="set-row" style="border-radius:14px 14px 0 0"><div class="set-label">Signal Alerts</div><label class="toggle"><input type="checkbox" id="tTgSignals" checked><span class="track"></span></label></div>
-        <div class="set-row" style="border-radius:0 0 14px 14px"><div><div class="set-label">Connect/Disconnect Alerts</div><div class="set-desc">Telegram message on Quotex connect &amp; disconnect</div></div><label class="toggle"><input type="checkbox" id="tTgStatus" checked><span class="track"></span></label></div>
+        <div class="field"><label>Chat / Channel ID</label><input type="text" id="inTgChat" placeholder="@channel or chat id"></div>
+        <div class="set-row" style="border-radius:14px"><div class="set-label">Signal Alerts</div><label class="toggle"><input type="checkbox" id="tTgSignals" checked><span class="track"></span></label></div>
       </div>
     </div>
 
@@ -414,7 +372,7 @@
       <div class="set-section-title">⬆️ Updates</div>
       <div class="card">
         <div class="row-between mb1">
-          <div><div class="set-label">App Version</div><div class="ver-badge" id="appVer">v1.0.1 • GitHub: prime-trader-app</div></div>
+          <div><div class="set-label">App Version</div><div class="ver-badge" id="appVer">v2.1.04 • GitHub: prime-trader-app</div></div>
         </div>
         <button class="btn btn-gold btn-block" id="btnCheckUpdate">🔍 Check for Updates</button>
         <div id="updateResult" class="mt1" style="display:none"></div>

@@ -5,7 +5,7 @@
 'use strict';
 
 /* ---------- APP VERSION / IN-APP UPDATES ---------- */
-const APP_VERSION = '2.0.66';
+const APP_VERSION = '2.1.04';
 // version.json lives at the repo root; bump its "version" + "apk_url" on every GitHub release.
 const UPDATE_URL = 'https://raw.githubusercontent.com/usamakha64/prime-trader-app/main/version.json';
 
@@ -19,6 +19,7 @@ const DEFAULTS = {
   minPayout: 75,
   sigCount: 15, sigPeriod: 30,          // signals per N minutes
   sigGap: 120,                          // seconds between signals
+  sigAdvance: 60,                       // seconds before entry to show signal
   expiry: 60,                       // seconds: 60 | 120 | 300
   futureTimeframes: [5],            // minutes: subset of [5,15,30]
   futureMinConf: 75, futurePayout: 85,
@@ -66,7 +67,7 @@ function fmtMoney(n) {
   return (n < 0 ? '-$' : '+$') + v;
 }
 function pad(n) { return String(n).padStart(2, '0'); }
-function fmtTime(d) { d = d instanceof Date ? d : new Date(d); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+function fmtTime(d) { d = d instanceof Date ? d : new Date(d); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 function fmtDate(d) { d = d instanceof Date ? d : new Date(d); return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }); }
 
 /* ---------- THEME ---------- */
@@ -187,14 +188,196 @@ const pnlDays = ['Today'];
 const pnlVals = [0];
 const eqVals = [0];
 
+
+/* ---------- REAL TRADING BRIDGE (v2.0.79) ---------- */
+// Places real trades on Quotex via WebView JS injection
+const PTTrade = {
+  // Test if trading selectors exist on the Quotex page
+  async selfTest() {
+    return new Promise((resolve) => {
+      const js = `(function() {
+        const results = {
+          assetBtn: !!document.querySelector('button.asset-select__button'),
+          callBtn: !!document.querySelector('button.button--success.call-btn'),
+          putBtn: !!document.querySelector('button.button--danger.put-btn')
+        };
+        return JSON.stringify(results);
+      })()`;
+      try {
+        const n = qxNative();
+        // Use the hidden WebView that has Quotex loaded
+        // For now, return the test via main webview
+        resolve({ error: 'Use hidden WebView for trading' });
+      } catch (e) {
+        resolve({ error: e.message });
+      }
+    });
+  },
+
+  // Place a real trade via Quotex WebSocket (v2.0.79)
+  // Returns: { ok: bool, requestId, error }
+  async placeRealTrade(asset, direction, amount, expirySec) {
+    console.log('[PTTrade] Placing REAL trade:', asset, direction, amount, expirySec);
+    try {
+      const n = qxNative();
+      if (n && typeof n.placeQuotexTrade === 'function') {
+        const resultStr = n.placeQuotexTrade(asset, direction, String(amount), String(expirySec));
+        const result = JSON.parse(resultStr);
+        console.log('[PTTrade] Result:', result);
+        return result;
+      }
+      return { ok: false, error: 'Native trading not available' };
+    } catch (e) {
+      console.error('[PTTrade] Error:', e);
+      return { ok: false, error: e.message };
+    }
+  },
+
+  // Auto-trade engine: monitors signals and places trades at entry time
+  _autoTrades: [],  // tracked real trades
+  _mtgLevels: {},   // asset -> current MTG level
+
+  // Called when a new signal is generated — schedules auto-trade if enabled
+  onSignal(sig) {
+    if (!S.autoTrade) return;
+    if (S.account === 'real' && !S.realTradeConfirm) {
+      console.log('[PTTrade] Real account auto-trade not confirmed');
+      return;
+    }
+    const delayMs = Math.max(0, (sig.entryAt || Date.now()) - Date.now());
+    console.log('[PTTrade] Scheduling auto-trade in', delayMs, 'ms for', sig.asset);
+    setTimeout(() => this.executeAutoTrade(sig, 0), delayMs);
+  },
+
+  async executeAutoTrade(sig, mtgLevel) {
+    if (!S.autoTrade) return;
+    const amount = S.amount * Math.pow(S.mtgMult || 2, mtgLevel);
+    console.log('[PTTrade] Executing auto-trade:', sig.asset, sig.dir, amount, 'MTG', mtgLevel);
+    
+    const result = await this.placeRealTrade(sig.asset, sig.dir, amount, sig.expiry || 60);
+    
+    if (result.ok) {
+      // Get entry balance for PnL calculation
+      let entryBal = 0;
+      try {
+        const n = qxNative();
+        if (n && typeof n.getBalance === 'function') {
+          const b = JSON.parse(n.getBalance());
+          entryBal = (S.account !== 'real') ? (b.demo || 0) : (b.live || 0);
+        }
+      } catch (e) {}
+      // Track the trade
+      this._autoTrades.push({
+        requestId: result.requestId,
+        asset: sig.asset,
+        dir: sig.dir,
+        amount: amount,
+        mtgLevel: mtgLevel,
+        entryTime: Date.now(),
+        entryBalance: entryBal,
+        expiry: sig.expiry || 60,
+        sig: sig,
+        settled: false
+      });
+      // Telegram notification
+      try {
+// DISABLED FAKE:         PTTelegram._post('🤖 <b>AUTO TRADE PLACED</b>\n\n' +
+// DISABLED FAKE:           'Asset: <b>' + assetName(sig.asset) + '</b>\n' +
+// DISABLED FAKE:           'Direction: <b>' + sig.dir + '</b>\n' +
+// DISABLED FAKE:           'Amount: <b>$' + amount + '</b>' + (mtgLevel > 0 ? ' (MTG ' + mtgLevel + ')' : '') + '\n' +
+// DISABLED FAKE:           'Expiry: <b>' + (sig.expiry || 60) + 's</b>');
+      } catch (e) {}
+      // Schedule result check
+      setTimeout(() => this.checkTradeResult(result.requestId), (sig.expiry || 60) * 1000 + 5000);
+    } else {
+      console.error('[PTTrade] Trade failed:', result.error);
+      try {
+// DISABLED FAKE:         PTTelegram._post('❌ <b>AUTO TRADE FAILED</b>\n\n' +
+// DISABLED FAKE:           'Asset: <b>' + assetName(sig.asset) + '</b>\n' +
+// DISABLED FAKE:           'Error: ' + result.error);
+      } catch (e) {}
+    }
+  },
+
+  async checkTradeResult(requestId) {
+    const trade = this._autoTrades.find(t => t.requestId === requestId);
+    if (!trade || trade.settled) return;
+    trade.settled = true;
+    
+    console.log('[PTTrade] Checking result for', requestId);
+    
+    // Get current balance and compare with entry balance
+    try {
+      const n = qxNative();
+      if (n && typeof n.getBalance === 'function') {
+        const b = JSON.parse(n.getBalance());
+        const isDemo = S.account !== 'real';
+        const currentBal = isDemo ? (b.demo || 0) : (b.live || 0);
+        const entryBal = trade.entryBalance || currentBal;
+        const pnl = currentBal - entryBal;
+        
+        // Determine win/loss: if balance increased by ~payout, it's a win
+        // Payout is typically 80-90% of amount
+        const expectedWin = trade.amount * 0.8; // Conservative estimate
+        const win = pnl > (trade.amount * 0.5); // If gained more than half amount, it's a win
+        
+        console.log('[PTTrade] Result:', trade.asset, win ? 'WIN' : 'LOSS', 'PnL:', pnl);
+        
+        // Telegram notification
+        try {
+// DISABLED FAKE:           PTTelegram._post((win ? '✅ <b>TRADE WIN</b>' : '❌ <b>TRADE LOSS</b>') + '\n\n' +
+// DISABLED FAKE:             'Asset: <b>' + assetName(trade.asset) + '</b>\n' +
+// DISABLED FAKE:             'Direction: <b>' + trade.dir + '</b>\n' +
+// DISABLED FAKE:             'Amount: <b>$' + trade.amount + '</b>' + (trade.mtgLevel > 0 ? ' (MTG ' + trade.mtgLevel + ')' : '') + '\n' +
+// DISABLED FAKE:             'PnL: <b>' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + '</b>');
+        } catch (e) {}
+        
+        // MTG logic: if loss and MTG enabled and steps remaining
+        if (!win && S.mtgEnabled !== false) {
+          const maxSteps = S.mtgSteps || 3;
+          if (trade.mtgLevel < maxSteps) {
+            console.log('[PTTrade] Triggering MTG level', trade.mtgLevel + 1);
+            // Wait a bit before MTG to avoid rapid-fire
+            setTimeout(() => {
+              // Create a new signal-like object for MTG
+              const mtgSig = {
+                asset: trade.asset,
+                dir: trade.dir,
+                conf: trade.sig.conf,
+                expiry: trade.expiry,
+                entryAt: Date.now() + 5000, // 5 sec delay
+                time: new Date()
+              };
+              this.executeAutoTrade(mtgSig, trade.mtgLevel + 1);
+            }, 3000);
+          } else {
+            console.log('[PTTrade] Max MTG steps reached');
+          }
+        }
+        
+        // Remove from tracking
+        this._autoTrades = this._autoTrades.filter(t => t.requestId !== requestId);
+      }
+    } catch (e) {
+      console.error('[PTTrade] Result check failed:', e);
+    }
+  }
+};
+
 /* ---------- RENDER: HOME ---------- */
 function renderHome() {
+  // v2.0.87: filter out expired signals using entryAt (not creation time)
+  const nowMs = Date.now();
+  const liveSignals = demoSignals.filter(s => {
+    const entryAt = s.entryAt || (s.time.getTime ? s.time.getTime() : +s.time);
+    return (entryAt + (s.expiry || 60) * 1000) > nowMs;
+  });
   // live feed
-  $('liveFeed').innerHTML = demoSignals.length ? demoSignals.map(s => `
+  $('liveFeed').innerHTML = liveSignals.length ? liveSignals.map(s => `
     <div class="signal-card ${s.strong ? 'strong' : ''}">
       <div class="sig-top">
         ${assetLabel(s.asset)}
-        <span class="sig-time">${fmtTime(s.time)}</span>
+        <span class="sig-time">Entry: ${fmtTime(s.entryAt ? new Date(s.entryAt) : s.time)}</span>
       </div>
       <div class="sig-mid">
         <span class="sig-dir ${s.dir === 'CALL' ? 'dir-call' : 'dir-put'}">${s.dir === 'CALL' ? '▲ CALL' : '▼ PUT'}</span>
@@ -202,6 +385,7 @@ function renderHome() {
       </div>
       <div class="sig-bot">
         <span class="sig-expiry">Expiry ${s.expiry}s</span>
+        <span class="countdown" data-sigtime="${s.time.getTime ? s.time.getTime() : +s.time}" data-expiry="${s.expiry}" data-entryat="${s.entryAt || (s.time.getTime ? s.time.getTime() : +s.time)}">--:--</span>
         ${s.strong ? '<span class="pill pill-gold">⭐ Strong</span>' : '<span class="pill pill-muted">Signal</span>'}
       </div>
       <div class="conf-bar"><div class="fill" style="width:${s.conf}%"></div></div>
@@ -220,12 +404,12 @@ function renderSignals() {
   const emptySig = `<div class="empty-state"><div class="big">📡</div><p>No signals yet.<br>Connect to Quotex to receive live signals.</p></div>`;
   $('sigRegular').innerHTML = demoRegular.length ? demoRegular.map((r, i) => `
     <div class="signal-card${r.strong ? ' strong' : ''}">
-      <div class="sig-top">${assetLabel(r.asset)}<span class="pill ${r.strong ? 'pill-gold' : 'pill-green'}">${r.strong ? '⚡ Strong' : '● Live'}</span></div>
+      <div class="sig-top">${assetLabel(r.asset)}<span class="sig-time">Entry: ${fmtTime(r.entryAt ? new Date(r.entryAt) : r.time)}</span><span class="pill ${r.strong ? 'pill-gold' : 'pill-green'}">${r.strong ? '⚡ Strong' : '● Live'}</span></div>
       <div class="sig-mid">
         <span class="sig-dir ${r.dir === 'CALL' ? 'dir-call' : 'dir-put'}">${r.dir === 'CALL' ? '▲ CALL' : '▼ PUT'}</span>
         <div class="sig-conf"><div class="conf-num">${r.conf}%</div><div class="conf-label">Confidence</div></div>
       </div>
-      <div class="sig-bot"><span class="sig-expiry">Expiry: ${r.expiry / 60} min</span><span class="countdown" data-countmin="${r.expiry / 60}">--:--</span></div>
+      <div class="sig-bot"><span class="sig-expiry">Expiry: ${r.expiry / 60} min</span><span class="countdown" data-sigtime="${r.time.getTime ? r.time.getTime() : +r.time}" data-expiry="${r.expiry}" data-entryat="${r.entryAt || (r.time.getTime ? r.time.getTime() : +r.time)}">--:--</span></div>
       <div class="conf-bar"><div class="fill" style="width:${r.conf}%"></div></div>
       <button class="btn btn-gold btn-sm btn-block mt1" data-mantrade="reg:${i}">📈 Trade</button>
     </div>`).join('') : emptySig;
@@ -280,21 +464,47 @@ function openManualTradeModal(kind, idx) {
   $('mTradeCancel').addEventListener('click', closeModal);
   $('mTradeConfirm').addEventListener('click', () => { closeModal(); placeManualTrade(kind, idx); });
 }
-function placeManualTrade(kind, idx) {
+async function placeManualTrade(kind, idx) {
   const sig = getSignal(kind, idx);
   if (!sig) return;
+  // v2.0.80: Manual Trade now places REAL trades (no more paper trading)
   const expSec = signalExpirySec(kind, sig);
-  const t = {
-    id: 'LT-' + Date.now().toString().slice(-6),
-    asset: sig.asset, dir: sig.dir, amount: S.amount, mtg: 0,
-    entryTime: new Date(), duration: expSec,
-    entryPrice: basePrice(sig.asset), cur: 0, payout: 0.82,
-    manual: true,
-  };
-  t.cur = t.entryPrice;
-  liveTrades.push(t);
-  renderLiveTrades();
-  toast(`✅ <b>Manual trade placed:</b> ${assetName(sig.asset)} ${sig.dir} $${S.amount}`, 'green');
+  toast('⏳ <b>Placing real trade...</b>', 'gold');
+  
+  try {
+    const result = await PTTrade.placeRealTrade(sig.asset, sig.dir, S.amount, expSec);
+    if (result.ok) {
+      toast(`✅ <b>Real trade placed:</b> ${assetName(sig.asset)} ${sig.dir} $${S.amount}`, 'green');
+      // Track for result detection
+      let entryBal = 0;
+      try {
+        const n = qxNative();
+        if (n && typeof n.getBalance === 'function') {
+          const b = JSON.parse(n.getBalance());
+          entryBal = (S.account !== 'real') ? (b.demo || 0) : (b.live || 0);
+        }
+      } catch (e) {}
+      PTTrade._autoTrades.push({
+        requestId: result.requestId,
+        asset: sig.asset, dir: sig.dir, amount: S.amount,
+        mtgLevel: 0, entryTime: Date.now(), entryBalance: entryBal,
+        expiry: expSec, sig: sig, settled: false, manual: true
+      });
+      setTimeout(() => PTTrade.checkTradeResult(result.requestId), expSec * 1000 + 5000);
+      // Telegram
+      try {
+// DISABLED FAKE:         PTTelegram._post('💰 <b>REAL TRADE PLACED</b>\n\n' +
+// DISABLED FAKE:           'Asset: <b>' + assetName(sig.asset) + '</b>\n' +
+// DISABLED FAKE:           'Direction: <b>' + (sig.dir === 'CALL' ? '▲' : '▼') + ' ' + sig.dir + '</b>\n' +
+// DISABLED FAKE:           'Amount: <b>$' + S.amount + '</b>\n' +
+// DISABLED FAKE:           'Expiry: <b>' + expSec + 's</b>');
+      } catch (e) {}
+    } else {
+      toast('❌ <b>Trade failed:</b> ' + (result.error || 'Unknown'), 'red');
+    }
+  } catch (e) {
+    toast('❌ <b>Error:</b> ' + e.message, 'red');
+  }
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-mantrade]');
@@ -307,6 +517,36 @@ document.addEventListener('click', (e) => {
 /* ---------- RENDER: LIVE TRADES (real-time P&L) ---------- */
 function renderLiveTrades() {
   const el = $('histLive');
+  // v2.0.75: On REAL account, don't show paper/simulated trades
+  if (S.account === 'real') {
+    $('liveCount').textContent = '0';
+    el.innerHTML = `<div class="empty-state"><div class="big">🔒</div><p>Paper trading disabled on REAL account.<br>Only real Quotex trades will appear here.</p></div>`;
+    return;
+  }
+  // v2.1.01: Merge PTTrade._autoTrades into liveTrades for display
+  try {
+    if (typeof PTTrade !== 'undefined' && PTTrade._autoTrades) {
+      PTTrade._autoTrades.forEach(at => {
+        if (at.settled) return;
+        const exists = liveTrades.find(lt => lt.id === at.requestId);
+        if (!exists) {
+          const px = (typeof getPrice === 'function') ? (getPrice(at.asset) || 0) : 0;
+          liveTrades.push({
+            id: at.requestId,
+            asset: at.asset,
+            dir: at.dir,
+            amount: at.amount,
+            mtg: at.mtgLevel || 0,
+            entryTime: at.entryTime,
+            entryPrice: px,
+            cur: px,
+            duration: at.expiry || 60,
+            manual: !at.sig || at.manual,
+          });
+        }
+      });
+    }
+  } catch (e) {}
   $('liveCount').textContent = liveTrades.length;
   if (!liveTrades.length) {
     el.innerHTML = `<div class="empty-state"><div class="big">💤</div><p>No open trades right now.<br>New trades appear here instantly.</p></div>`;
@@ -321,7 +561,7 @@ function renderLiveTrades() {
       <div class="lt-top">
         <span class="pulse-dot"></span>
         <span class="lt-asset">${assetName(t.asset)}</span>
-        <span class="lt-live-label">Live</span>
+        <span class="lt-live-label">🔴 LIVE</span>
         ${t.manual ? '<span class="pill pill-gold">👆 Manual</span>' : ''}
         <button class="chart-btn" data-chart="${t.id}">📊 Chart</button>
         <span class="pill ${winning ? 'pill-green' : 'pill-red'}" data-lt-status>${winning ? '▲ WINNING' : '▼ LOSING'}</span>
@@ -344,6 +584,48 @@ function renderLiveTrades() {
     </div>`;
   }).join('');
 }
+/* v2.0.83: signal countdowns in SECONDS (like Termux) + progress bar */
+setInterval(() => {
+  $$('[data-sigtime]').forEach(el => {
+    const sigTime = +el.dataset.sigtime;
+    const expirySec = +el.dataset.expiry || 60;
+    const entryAt = +el.dataset.entryat || sigTime;
+    const now = Date.now();
+    let remainMs, label, totalMs;
+    if (now < entryAt) {
+      remainMs = entryAt - now;
+      totalMs = entryAt - sigTime;
+      label = 'Entry in ';
+    } else {
+      remainMs = (entryAt + expirySec * 1000) - now;
+      totalMs = expirySec * 1000;
+      label = '';
+    }
+    if (remainMs <= 0) {
+      el.textContent = '0s';
+      el.classList.add('expired');
+      // v2.0.88: Only hide if truly expired (entryAt + expiry passed), not on data error
+      // Check if entryAt is valid before hiding
+      if (entryAt > 0 && now > (entryAt + expirySec * 1000)) {
+        const card = el.closest('.signal-card');
+        if (card) card.style.display = 'none';
+      }
+    } else {
+      const secs = Math.ceil(remainMs / 1000);
+      el.textContent = label + secs + 's';
+      el.classList.remove('expired');
+    }
+    // Update progress bar (yellow line shrinks as time passes)
+    const card = el.closest('.signal-card');
+    if (card) {
+      const bar = card.querySelector('.conf-bar .fill');
+      if (bar && totalMs > 0) {
+        const pct = Math.max(0, Math.min(100, (remainMs / totalMs) * 100));
+        bar.style.width = pct + '%';
+      }
+    }
+  });
+}, 1000);
 /* tick live trades every second */
 setInterval(() => {
   if (!liveTrades.length) return;
@@ -370,13 +652,33 @@ setInterval(() => {
       if (shouldShow && !isShowing) wrap.innerHTML = `<button class="btn btn-gold btn-sm btn-block mt1" data-mtg="${t.id}">⚡ Take MTG — $${Math.round(t.amount * S.mtgMult)}</button>`;
       if (!shouldShow && isShowing) wrap.innerHTML = '';
     }
+    // v2.0.74: move expired trades to history
+    if (rem <= 0 && !t.settled) {
+      t.settled = true;
+      const { winning: w, est } = tradeLivePL(t);
+      // Add to batches history
+      let batch = batches[batches.length - 1];
+      if (!batch || (Date.now() - batch.time > 3600000)) {
+        batch = { num: batches.length + 1, time: Date.now(), trades: [], wins: 0, losses: 0, pl: 0 };
+        batches.push(batch);
+      }
+      const exitT = new Date();
+      batch.trades.push({
+        asset: t.asset, dir: t.dir, amount: t.amount, win: w, pl: est,
+        entryTime: t.entryTime, exitTime: exitT,
+        date: exitT.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        open: t.entryPrice ? t.entryPrice.toFixed(5) : '—',
+        close: t.cur ? t.cur.toFixed(5) : '—'
+      });
+      if (w) batch.wins++; else batch.losses++;
+      batch.pl += est;
+    }
   });
-  // countdowns on signals page
-  $$('[data-countmin]').forEach(el => {
-    const m = +el.dataset.countmin;
-    const s = Math.floor(rnd(0, 59));
-    el.textContent = pad(m) + ':' + pad(s);
-  });
+  // Remove settled trades from live
+  for (let i = liveTrades.length - 1; i >= 0; i--) {
+    if (liveTrades[i].settled) liveTrades.splice(i, 1);
+  }
+  if (liveTrades.length === 0) renderLiveTrades();
 }, 1000);
 $$('#histTabs button').forEach(b => b.addEventListener('click', () => {
   $$('#histTabs button').forEach(x => x.classList.remove('active'));
@@ -608,6 +910,14 @@ function openAccountModal() {
       $('mCancel2').addEventListener('click', closeModal);
       $('mConfirmReal').addEventListener('click', () => {
         S = store.set({ account: 'real' }); renderAcct(); closeModal();
+        // v2.0.77: Refresh balance on REAL switch
+        try {
+          const n = qxNative();
+          if (n) {
+            const b = JSON.parse(n.getBalance());
+            onQxBalance(b.demo || 0, b.live || 0, b.currency || 'USD');
+          }
+        } catch (e) {}
         toast('💰 <b>Switched to REAL account.</b> Trade carefully!', 'red');
         // v2.0.40: Telegram notify on account switch
         try { if (S.tgStatus) PTTelegram.sendStatus('💰 <b>Switched to REAL account</b>\nTime: ' + PTTelegram.fmtTime(new Date())); } catch (e) {}
@@ -615,6 +925,14 @@ function openAccountModal() {
       return;
     }
     S = store.set({ account: k }); renderAcct(); closeModal();
+    // v2.0.77: Refresh balance on account switch
+    try {
+      const n = qxNative();
+      if (n) {
+        const b = JSON.parse(n.getBalance());
+        onQxBalance(b.demo || 0, b.live || 0, b.currency || 'USD');
+      }
+    } catch (e) {}
     toast(`${ACCTS[k].ico} <b>Switched to ${ACCTS[k].name}.</b>`, 'gold');
     // v2.0.40: Telegram notify on account switch
     try { if (S.tgStatus) PTTelegram.sendStatus(`${ACCTS[k].ico} <b>Switched to ${ACCTS[k].name} account</b>\nTime: ` + PTTelegram.fmtTime(new Date())); } catch (e) {}
@@ -730,6 +1048,13 @@ function renderDiagnostics() {
   lines.push('🔑 Akhri kamyab login: ' + age(c.lastAuthAgeSec));
   if (c.lastError) lines.push('❌ Akhri error: ' + c.lastError);
   if (!d.connected && !d.connecting) lines.push('\n💡 Hal: naya SSID nikalo aur Save & Connect dabao.');
+  // v2.0.89: Show order debug log
+  try {
+    if (n.getOrderDebugLog) {
+      var orderLog = n.getOrderDebugLog();
+      lines.push('\n📝 ORDER LOG:\n' + orderLog);
+    }
+  } catch (e) {}
   box.textContent = lines.join('\n');
 }
 // v2.0.52: Signal Engine Debug — why no signals?
@@ -1237,6 +1562,7 @@ function runSignalEngine() {
       id: 'qx' + nowMs + '_' + i,
       asset: asset, dir: r.signal, conf: r.conf,
       time: new Date(), expiry: +S.expiry || 60,
+      entryAt: nowMs + ((+S.sigAdvance || 0) * 1000),
       entryPrice: price, settled: false, result: null,
       strong: r.conf >= (+S.strongConf || 85), source: 'bot-7ind'
     };
@@ -1254,6 +1580,8 @@ function runSignalEngine() {
       window._ptLastSignalAt = sig.time.toISOString();
       PTWeb.publishSignal(sig).then(function() { PTWeb.syncBotStatus(); });
       PTTelegram.sendSignal(sig);
+      // v2.0.79: Auto-trade hook
+      try { if (typeof PTTrade !== 'undefined') PTTrade.onSignal(sig); } catch (e) {}
     } catch (e) {}
     // Phase 5: hand the signal to native (background service forwards it to
     // the visible app + raises a status-bar notification when app is hidden)
@@ -1592,20 +1920,23 @@ const PTTelegram = {
   },
 
   fmtTime(d) {
-    try { const x = (d instanceof Date) ? d : new Date(d); return x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    try { const x = (d instanceof Date) ? d : new Date(d); return x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
     catch (e) { return ''; }
   },
 
   async sendSignal(sig) {
     if (!S.pushSignals) return false;
-    const arrow = sig.dir === 'CALL' ? '🟢' : '🔴';
+    // v2.0.72: App style — CALL/PUT with arrows (user request)
+    const arrow = sig.dir === 'CALL' ? '▲' : '▼';
+    const dot = sig.dir === 'CALL' ? '🟢' : '🔴';
+    const entryTime = this.fmtTime(sig.entryAt ? new Date(sig.entryAt) : sig.time);
     const text =
-      '📡 <b>NEW SIGNAL</b>\n' +
+      '📡 <b>NEW SIGNAL</b>\n\n' +
       'Asset: <b>' + assetName(sig.asset) + '</b>\n' +
-      'Direction: <b>' + sig.dir + '</b> ' + arrow + '\n' +
+      'Direction: <b>' + arrow + ' ' + sig.dir + '</b> ' + dot + '\n' +
       'Confidence: <b>' + sig.conf + '%</b>\n' +
-      'Expiry: <b>' + (sig.expiry || 60) + 's</b>\n' +
-      'Time: ' + this.fmtTime(sig.time);
+      'Entry: <b>' + entryTime + '</b>\n' +
+      'Expiry: <b>' + (sig.expiry || 60) + 's</b>';
     return this._post(text);
   },
 
@@ -1847,6 +2178,7 @@ function initSettings() {
   renderSigCountChips();
   renderSigPeriodChips();
   renderSigGapChips();
+  renderSigAdvChips();
   renderFutureSigCountChips();
   renderFutureSigPeriodChips();
   renderFutureSigGapChips();
@@ -1967,6 +2299,7 @@ const REG_SIG_COUNT_OPTS = [2, 3, 5, 10, 15, 20, 30];
 const SIG_PERIOD_OPTS = [{ m: 10, label: '10 min' }, { m: 30, label: '30 min' }, { m: 60, label: '1 hour' }];
 const REG_SIG_PERIOD_OPTS = [{ m: 5, label: '5 min' }, { m: 10, label: '10 min' }, { m: 20, label: '20 min' }, { m: 30, label: '30 min' }, { m: 60, label: '1 hour' }];
 const SIG_GAP_OPTS = [{ s: 30, label: '30s' }, { s: 60, label: '60s' }, { s: 120, label: '120s' }, { s: 300, label: '300s' }];
+const SIG_ADV_OPTS = [{ s: 60, label: '1 min' }, { s: 120, label: '2 min' }, { s: 300, label: '5 min' }];
 function periodLabel(min) {
   const o = REG_SIG_PERIOD_OPTS.find(o => o.m === min) || SIG_PERIOD_OPTS.find(o => o.m === min);
   return o ? o.label : min + ' min';
@@ -2006,7 +2339,20 @@ function renderSigGapChips() {
   $$('#sigGapChips .chip').forEach(c => c.addEventListener('click', () => {
     S = store.set({ sigGap: +c.dataset.sg });
     renderSigGapChips();
+  renderSigAdvChips();
     toast('📡 Signal gap: ' + S.sigGap + 's', 'gold');
+  }));
+}
+function renderSigAdvChips() {
+  const box = $('sigAdvChips');
+  if (!box) return;
+  box.innerHTML = SIG_ADV_OPTS.map(o => `
+    <button class="chip ${S.sigAdvance === o.s ? 'on' : ''}" data-sa="${o.s}">${o.label}</button>`).join('');
+  $('vSigAdv').textContent = S.sigAdvance === 0 ? 'Now' : S.sigAdvance >= 60 ? (S.sigAdvance/60) + ' min' : S.sigAdvance + 's';
+  $$('#sigAdvChips .chip').forEach(c => c.addEventListener('click', () => {
+    S = store.set({ sigAdvance: +c.dataset.sa });
+    renderSigAdvChips();
+    toast('⏰ Signal advance: ' + $('vSigAdv').textContent, 'gold');
   }));
 }
 function renderFutureSigCountChips() {
